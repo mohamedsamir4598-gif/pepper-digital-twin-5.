@@ -209,6 +209,54 @@ st.metric(
 )
 
 st.caption(
+    
+# AI MODEL - FIRST MACHINE LEARNING MODEL
+
+from sklearn.ensemble import RandomForestRegressor
+
+# Training data
+data = {
+    "temperature": [20, 25, 30, 35, 40, 22, 28, 33, 38, 26],
+    "initial_moisture": [30, 28, 25, 22, 20, 32, 27, 24, 21, 29],
+    "irrigation_minutes": [0, 5, 10, 15, 20, 0, 10, 15, 20, 5],
+    "final_moisture": [29, 29, 29, 29, 29, 31, 31, 30, 30, 30]
+}
+
+import pandas as pd
+
+df_ai = pd.DataFrame(data)
+
+# Inputs and target
+X = df_ai[
+    ["temperature", "initial_moisture", "irrigation_minutes"]
+]
+
+y = df_ai["final_moisture"]
+
+# Create and train AI model
+model = RandomForestRegressor(
+    n_estimators=100,
+    random_state=42
+)
+
+model.fit(X, y)
+
+# Make a prediction
+new_data = pd.DataFrame([{
+    "temperature": 30,
+    "initial_moisture": 24,
+    "irrigation_minutes": 10
+}])
+
+prediction = model.predict(new_data)
+
+st.header("AI Prediction")
+
+st.metric(
+    "Predicted Soil Moisture",
+    f"{prediction[0]:.2f}%"
+)
+
     "Research prototype: nutrient requirements, "
     "water uptake, EC limits and pH limits are assumed values. "
     "They must be replaced with calibrated crop-specific models "
