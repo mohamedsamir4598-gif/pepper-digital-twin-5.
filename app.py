@@ -209,8 +209,11 @@ st.metric(
 )
 
 st.caption(
-  "Research prototype: values are illustrative only."
-    )
+    "Research prototype: nutrient requirements, "
+    "water uptake, EC limits and pH limits are assumed values. "
+    "They must be replaced with calibrated crop-specific models "
+    "and experimental measurements before real operation."
+)
 # AI MODEL - FIRST MACHINE LEARNING MODEL
 
 from sklearn.ensemble import RandomForestRegressor
