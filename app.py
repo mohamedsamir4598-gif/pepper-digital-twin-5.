@@ -209,7 +209,8 @@ st.metric(
 )
 
 st.caption(
-    
+  "Research prototype: values are illustrative only."
+    )
 # AI MODEL - FIRST MACHINE LEARNING MODEL
 
 from sklearn.ensemble import RandomForestRegressor
