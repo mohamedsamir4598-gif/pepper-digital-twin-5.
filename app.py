@@ -8,60 +8,108 @@ st.set_page_config(
 )
 
 st.title("🌱 Pepper Digital Twin")
-st.subheader("Smart Irrigation and Fertigation System")
+st.subheader("Smart Irrigation Decision Engine")
 
-st.info("Welcome to your Smart Agriculture Dashboard")
+st.header("1. Current Soil Conditions")
 
-st.header("Current Soil Conditions")
+soil_moisture = st.slider(
+    "Current Soil Moisture (%)",
+    10, 50, 24
+)
 
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
-    st.metric("Soil Moisture", "24 %")
+    st.metric("Current Soil Moisture", f"{soil_moisture}%")
 
 with col2:
-    st.metric("Soil Temperature", "25 °C")
-
-with col3:
     st.metric("Valve Status", "CLOSED")
 
 st.divider()
 
-st.header("💧 Irrigation Simulation")
+st.header("2. Irrigation Scenarios")
 
-soil_moisture = st.slider(
-    "Current Soil Moisture (%)",
-    min_value=10,
-    max_value=50,
-    value=24
-)
+target_min = 28.0
+target_max = 30.0
 
-irrigation_time = st.slider(
-    "Irrigation Duration (minutes)",
-    min_value=0,
-    max_value=60,
-    value=15
-)
+st.write("Target soil moisture range: 28–30%")
 
-if st.button("Run Digital Twin Simulation"):
+soil_volume = 20.0
+water_flow = 6.0
 
-    soil_volume = 20.0
-    water_flow = 6.0
+durations = [10, 15, 20]
+scenarios = []
 
-    water_added = water_flow * irrigation_time / 60
+for duration in durations:
+
+    water_added = water_flow * duration / 60
 
     predicted_moisture = (
-        soil_moisture + water_added / soil_volume * 100
+        soil_moisture +
+        (water_added / soil_volume) * 100
     )
 
-    st.success("Simulation Completed!")
+    scenarios.append({
+        "Duration (min)": duration,
+        "Water Added (L)": round(water_added, 2),
+        "Predicted Moisture (%)": round(
+            predicted_moisture, 2
+        ),
+        "Suitable": (
+            target_min <= predicted_moisture <= target_max
+        )
+    })
+
+st.dataframe(
+    scenarios,
+    use_container_width=True,
+    hide_index=True
+)
+
+st.divider()
+
+st.header("3. Intelligent Decision")
+
+suitable_scenarios = [
+    scenario for scenario in scenarios
+    if scenario["Suitable"]
+]
+
+if suitable_scenarios:
+
+    best_scenario = min(
+        suitable_scenarios,
+        key=lambda x: x["Duration (min)"]
+    )
+
+    st.success("Suitable irrigation scenario found!")
 
     st.metric(
-        "Predicted Soil Moisture",
-        f"{predicted_moisture:.2f} %"
+        "Recommended Irrigation Time",
+        f"{best_scenario['Duration (min)']} minutes"
     )
 
     st.metric(
-        "Water Added",
-        f"{water_added:.2f} Liter"
+        "Expected Soil Moisture",
+        f"{best_scenario['Predicted Moisture (%)']}%"
     )
+
+    st.metric(
+        "Water Requirement",
+        f"{best_scenario['Water Added (L)']} Liter"
+    )
+
+else:
+
+    st.warning(
+        "No tested scenario reaches the target moisture range."
+    )
+
+    st.write(
+        "The system needs to test additional irrigation durations."
+    )
+
+st.caption(
+    "Educational simulation using assumed soil volume and water flow. "
+    "Not yet calibrated with real sensor measurements."
+)
