@@ -8,105 +8,75 @@ st.set_page_config(
 )
 
 st.title("🌱 Pepper Digital Twin")
-st.subheader("Smart Irrigation Decision Engine")
+st.subheader("Soil Water Balance Model")
 
-st.header("1. Current Soil Conditions")
+st.header("1. Initial Conditions")
 
 soil_moisture = st.slider(
-    "Current Soil Moisture (%)",
-    10, 50, 24
+    "Initial Soil Moisture (%)",
+    10, 50, 28
 )
 
-col1, col2 = st.columns(2)
+irrigation_time = st.slider(
+    "Irrigation Duration (minutes)",
+    0, 60, 10
+)
 
-with col1:
-    st.metric("Current Soil Moisture", f"{soil_moisture}%")
+simulation_time = st.slider(
+    "Simulation Period (minutes)",
+    0, 180, 60
+)
 
-with col2:
-    st.metric("Valve Status", "CLOSED")
-
-st.divider()
-
-st.header("2. Irrigation Optimization")
-
-target_min = 28.0
-target_max = 30.0
+st.header("2. Model Parameters")
 
 soil_volume = 20.0
 water_flow = 6.0
+crop_water_uptake = 0.02
 
-best_scenario = None
-scenarios = []
-
-for duration in range(61):
-
-    water_added = water_flow * duration / 60
-
-    predicted_moisture = (
-        soil_moisture +
-        (water_added / soil_volume) * 100
-    )
-
-    scenarios.append({
-        "Duration (min)": duration,
-        "Water Added (L)": round(water_added, 2),
-        "Predicted Moisture (%)": round(
-            predicted_moisture, 2
-        )
-    })
-
-    if (
-        best_scenario is None
-        and target_min <= predicted_moisture <= target_max
-    ):
-        best_scenario = {
-            "duration": duration,
-            "water": water_added,
-            "moisture": predicted_moisture
-        }
-
-st.subheader("Tested Irrigation Scenarios")
-
-st.dataframe(
-    scenarios,
-    use_container_width=True,
-    hide_index=True
+initial_water = (
+    soil_volume * soil_moisture / 100
 )
 
-st.divider()
+water_added = (
+    water_flow * irrigation_time / 60
+)
 
-st.header("3. Intelligent Irrigation Decision")
+water_consumed = (
+    crop_water_uptake * simulation_time
+)
 
-if best_scenario is not None:
+final_water = (
+    initial_water + water_added - water_consumed
+)
 
-    st.success("Suitable irrigation scenario found!")
+final_moisture = (
+    final_water / soil_volume * 100
+)
 
-    col1, col2, col3 = st.columns(3)
+st.header("3. Simulation Results")
 
-    with col1:
-        st.metric(
-            "Recommended Duration",
-            f"{best_scenario['duration']} min"
-        )
+col1, col2, col3 = st.columns(3)
 
-    with col2:
-        st.metric(
-            "Water Required",
-            f"{best_scenario['water']:.2f} L"
-        )
+with col1:
+    st.metric("Water Added", f"{water_added:.2f} L")
 
-    with col3:
-        st.metric(
-            "Predicted Moisture",
-            f"{best_scenario['moisture']:.2f}%"
-        )
+with col2:
+    st.metric("Water Uptake", f"{water_consumed:.2f} L")
 
-else:
-    st.warning(
-        "No suitable scenario found within 60 minutes."
+with col3:
+    st.metric(
+        "Final Soil Moisture",
+        f"{final_moisture:.2f}%"
     )
 
+st.write("### Water Balance")
+
+st.write(f"Initial water: {initial_water:.2f} L")
+st.write(f"Added water: {water_added:.2f} L")
+st.write(f"Consumed water: {water_consumed:.2f} L")
+st.write(f"Final water: {final_water:.2f} L")
+
 st.caption(
-    "Educational model using assumed parameters. "
-    "Real sensor calibration and field validation are required."
+    "Educational model with assumed water uptake. "
+    "No drainage or water redistribution is included."
 )
