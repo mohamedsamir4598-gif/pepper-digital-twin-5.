@@ -1,773 +1,623 @@
+import json
+from pathlib import Path
 
-import streamlit as st
+import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
 
-from datetime import datetime, date
-from database import get_connection, initialize_database
-
-st.set_page_config(
-    page_title="Pepper Digital Twin",
-    page_icon="🌱",
-    layout="wide"
+from models.simulation import (
+    simulate_crop,
+    compare_scenarios,
+    REQUIRED_WEATHER_COLUMNS,
+)
+from models.training import (
+    train_residual_model,
+    predict_with_pretrained_model,
+    PRETRAINED_MODEL_PATH,
+    PRETRAINED_REPORT_PATH,
+    PRETRAINED_DATA_PATH,
+    LITERATURE_MODEL_PATH,
 )
 
-initialize_database()
+st.set_page_config(
+    page_title="Pepper Greenhouse Digital Twin",
+    page_icon="🌱",
+    layout="wide",
+)
 
-def query(sql, params=()):
-    conn = get_connection()
-    df = pd.read_sql_query(sql, conn, params=params)
-    conn.close()
-    return df
+st.title("🌱 Pepper Greenhouse Digital Twin")
+st.caption(
+    "Research prototype | Crop growth simulation | "
+    "Smart irrigation and fertigation | Pretrained AI"
+)
 
-def execute(sql, params=()):
-    conn = get_connection()
-    conn.execute(sql, params)
-    conn.commit()
-    conn.close()
+with st.sidebar:
+    st.header("Greenhouse configuration")
 
-st.markdown("""
-<style>
-.main {
-    direction: rtl;
-}
-.block-container {
-    padding-top: 2rem;
-}
-</style>
-""", unsafe_allow_html=True)
+    crop_days = st.slider(
+        "Simulation duration (days)", 60, 180, 120, 5
+    )
 
-st.title("🌱 Pepper Digital Twin")
-st.caption("Smart Irrigation and Fertigation Management System")
+    area_m2 = st.number_input(
+        "Greenhouse area (m²)",
+        min_value=20.0,
+        max_value=10000.0,
+        value=300.0,
+        step=10.0,
+    )
 
-menu = [
-    "لوحة التحكم",
-    "إدارة التجارب",
-    "إدارة المعاملات",
-    "إدارة القطع والنباتات",
-    "تسجيل قياسات التربة والجو",
-    "تسجيل نمو النبات",
-    "إدارة الري",
-    "إدارة التسميد",
-    "تسجيل الحصاد",
-    "بيانات الحساسات",
-    "الذكاء الاصطناعي",
-    "قاعدة البيانات"
-]
-
-page = st.sidebar.radio("القائمة الرئيسية", menu)
-
-# --------------------------------------------------
-# Dashboard
-# --------------------------------------------------
-
-if page == "لوحة التحكم":
-
-    st.header("لوحة متابعة النظام")
-
-    experiments = query("SELECT * FROM experiments")
-    plots = query("SELECT * FROM plots")
-    plants = query("SELECT * FROM plants")
-    observations = query("SELECT * FROM plot_observations")
-    harvests = query("SELECT * FROM harvests")
-
-    c1, c2, c3, c4 = st.columns(4)
-
-    c1.metric("التجارب", len(experiments))
-    c2.metric("القطع التجريبية", len(plots))
-    c3.metric("النباتات", len(plants))
-    c4.metric("سجلات الحصاد", len(harvests))
-
-    st.subheader("آخر قياسات التربة والجو")
-
-    if not observations.empty:
-        st.dataframe(
-            observations.tail(10),
-            use_container_width=True
-        )
-    else:
-        st.info("لم يتم تسجيل قياسات حتى الآن.")
-
-    if not harvests.empty:
-        st.subheader("الإنتاجية المسجلة")
-        st.dataframe(harvests, use_container_width=True)
-
-# --------------------------------------------------
-# Experiments
-# --------------------------------------------------
-
-elif page == "إدارة التجارب":
-
-    st.header("إضافة تجربة جديدة")
-
-    with st.form("experiment_form"):
-
-        name = st.text_input("اسم التجربة")
-        crop = st.text_input("المحصول", "Pepper")
-        location = st.text_input("موقع التجربة")
-        start_date = st.date_input("تاريخ البداية")
-        notes = st.text_area("ملاحظات")
-
-        submit = st.form_submit_button("حفظ التجربة")
-
-        if submit:
-            if name.strip():
-                execute("""
-                INSERT INTO experiments
-                (name, crop, location, start_date, notes)
-                VALUES (?, ?, ?, ?, ?)
-                """, (
-                    name, crop, location,
-                    str(start_date), notes
-                ))
-                st.success("تم حفظ التجربة.")
-                st.rerun()
-            else:
-                st.error("أدخل اسم التجربة.")
-
-    st.subheader("التجارب المسجلة")
-    st.dataframe(query("SELECT * FROM experiments"),
-                 use_container_width=True)
-
-# --------------------------------------------------
-# Treatments
-# --------------------------------------------------
-
-elif page == "إدارة المعاملات":
-
-    st.header("إضافة معاملة")
-
-    experiments = query("SELECT * FROM experiments")
-
-    if experiments.empty:
-        st.warning("سجل تجربة أولًا.")
-    else:
-        exp_map = dict(zip(
-            experiments["name"],
-            experiments["id"]
-        ))
-
-        with st.form("treatment_form"):
-
-            selected = st.selectbox(
-                "التجربة",
-                list(exp_map.keys())
-            )
-
-            name = st.text_input("اسم المعاملة")
-            description = st.text_area("وصف المعاملة")
-
-            submit = st.form_submit_button("حفظ")
-
-            if submit:
-                if name.strip():
-                    execute("""
-                    INSERT INTO treatments
-                    (experiment_id, name, description)
-                    VALUES (?, ?, ?)
-                    """, (
-                        exp_map[selected], name, description
-                    ))
-                    st.success("تم حفظ المعاملة.")
-                    st.rerun()
-                else:
-                    st.error("أدخل اسم المعاملة.")
-
-    st.dataframe(query("""
-        SELECT t.id, e.name AS experiment,
-               t.name AS treatment, t.description
-        FROM treatments t
-        JOIN experiments e ON e.id=t.experiment_id
-    """), use_container_width=True)
-
-# --------------------------------------------------
-# Plots and plants
-# --------------------------------------------------
-
-elif page == "إدارة القطع والنباتات":
-
-    st.header("تسجيل قطعة تجريبية")
-
-    experiments = query("SELECT * FROM experiments")
-
-    if experiments.empty:
-        st.warning("سجل تجربة أولًا.")
-    else:
-        exp_map = dict(zip(experiments["name"], experiments["id"]))
-
-        with st.form("plot_form"):
-
-            exp_name = st.selectbox(
-                "التجربة", list(exp_map.keys())
-            )
-
-            treatments = query("""
-                SELECT * FROM treatments
-                WHERE experiment_id=?
-            """, (exp_map[exp_name],))
-
-            if treatments.empty:
-                st.warning("أضف معاملة لهذه التجربة أولًا.")
-                submitted = False
-            else:
-                treatment_map = dict(zip(
-                    treatments["name"], treatments["id"]
-                ))
-
-                treatment_name = st.selectbox(
-                    "المعاملة", list(treatment_map.keys())
-                )
-
-                code = st.text_input("كود القطعة")
-                replication = st.number_input(
-                    "رقم المكرر", min_value=1, step=1
-                )
-                area = st.number_input(
-                    "المساحة بالمتر المربع",
-                    min_value=0.1, value=10.0
-                )
-
-                submitted = st.form_submit_button("حفظ القطعة")
-
-                if submitted:
-                    if code.strip():
-                        try:
-                            execute("""
-                            INSERT INTO plots
-                            (experiment_id, treatment_id,
-                             plot_code, replication, area_m2)
-                            VALUES (?, ?, ?, ?, ?)
-                            """, (
-                                exp_map[exp_name],
-                                treatment_map[treatment_name],
-                                code, replication, area
-                            ))
-                            st.success("تم حفظ القطعة.")
-                            st.rerun()
-                        except Exception as error:
-                            st.error(str(error))
-                    else:
-                        st.error("أدخل كود القطعة.")
+    plant_density = st.number_input(
+        "Plant density (plants/m²)",
+        min_value=1.0,
+        max_value=8.0,
+        value=2.5,
+        step=0.1,
+    )
 
     st.divider()
-    st.subheader("إضافة نبات لقطعة")
+    st.subheader("Soil properties")
 
-    plots = query("SELECT * FROM plots")
+    fc = st.slider(
+        "Field capacity (%)", 15.0, 55.0, 32.0, 0.5
+    ) / 100
 
-    if not plots.empty:
+    wp = st.slider(
+        "Wilting point (%)", 5.0, 35.0, 15.0, 0.5
+    ) / 100
 
-        plot_map = dict(zip(
-            plots["plot_code"], plots["id"]
-        ))
-
-        with st.form("plant_form"):
-
-            selected_plot = st.selectbox(
-                "القطعة", list(plot_map.keys())
-            )
-
-            plant_code = st.text_input("كود النبات")
-
-            submit = st.form_submit_button("إضافة النبات")
-
-            if submit:
-                if plant_code.strip():
-                    try:
-                        execute("""
-                        INSERT INTO plants (plot_id, plant_code)
-                        VALUES (?, ?)
-                        """, (plot_map[selected_plot], plant_code))
-
-                        st.success("تم تسجيل النبات.")
-                        st.rerun()
-                    except Exception as error:
-                        st.error(str(error))
-                else:
-                    st.error("أدخل كود النبات.")
-
-    st.subheader("القطع")
-    st.dataframe(query("SELECT * FROM plots"),
-                 use_container_width=True)
-
-    st.subheader("النباتات")
-    st.dataframe(query("""
-        SELECT plants.*, plots.plot_code
-        FROM plants
-        JOIN plots ON plants.plot_id=plots.id
-    """), use_container_width=True)
-
-# --------------------------------------------------
-# Soil and weather observations
-# --------------------------------------------------
-
-elif page == "تسجيل قياسات التربة والجو":
-
-    st.header("إدخال قياسات التربة والجو")
-
-    plots = query("SELECT * FROM plots")
-
-    if plots.empty:
-        st.warning("سجل قطعة تجريبية أولًا.")
-    else:
-        plot_map = dict(zip(plots["plot_code"], plots["id"]))
-
-        with st.form("observation_form"):
-
-            plot = st.selectbox("القطعة", list(plot_map.keys()))
-            obs_date = st.date_input("التاريخ", date.today())
-
-            moisture = st.number_input(
-                "رطوبة التربة (%)", min_value=0.0, max_value=100.0
-            )
-
-            soil_ec = st.number_input(
-                "EC التربة (dS/m)", min_value=0.0
-            )
-
-            soil_ph = st.number_input(
-                "pH التربة", min_value=0.0, max_value=14.0
-            )
-
-            water_ec = st.number_input(
-                "EC مياه الري (dS/m)", min_value=0.0
-            )
-
-            water_ph = st.number_input(
-                "pH مياه الري", min_value=0.0, max_value=14.0
-            )
-
-            temperature = st.number_input(
-                "درجة حرارة الهواء (°C)"
-            )
-
-            humidity = st.number_input(
-                "الرطوبة النسبية (%)",
-                min_value=0.0, max_value=100.0
-            )
-
-            notes = st.text_area("ملاحظات")
-
-            submit = st.form_submit_button("حفظ القياسات")
-
-            if submit:
-                execute("""
-                INSERT INTO plot_observations
-                (plot_id, observation_date, soil_moisture,
-                 soil_ec, soil_ph, water_ec, water_ph,
-                 air_temperature, relative_humidity, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    plot_map[plot], str(obs_date), moisture,
-                    soil_ec, soil_ph, water_ec, water_ph,
-                    temperature, humidity, notes
-                ))
-
-                st.success("تم حفظ القياسات.")
-                st.rerun()
-
-    data = query("""
-        SELECT o.*, p.plot_code
-        FROM plot_observations o
-        JOIN plots p ON p.id=o.plot_id
-        ORDER BY o.observation_date DESC
-    """)
-
-    st.dataframe(data, use_container_width=True)
-
-    if not data.empty:
-        st.subheader("تغير رطوبة التربة")
-        fig = px.line(
-            data.sort_values("observation_date"),
-            x="observation_date",
-            y="soil_moisture",
-            color="plot_code",
-            markers=True
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-# --------------------------------------------------
-# Plant growth
-# --------------------------------------------------
-
-elif page == "تسجيل نمو النبات":
-
-    st.header("تسجيل قياسات النمو الخضري")
-
-    plants = query("""
-        SELECT plants.id, plants.plant_code, plots.plot_code
-        FROM plants
-        JOIN plots ON plots.id=plants.plot_id
-    """)
-
-    if plants.empty:
-        st.warning("سجل النباتات أولًا.")
-    else:
-        plant_map = {
-            f"{r['plot_code']} - {r['plant_code']}": r["id"]
-            for _, r in plants.iterrows()
-        }
-
-        with st.form("growth_form"):
-
-            selected = st.selectbox(
-                "النبات", list(plant_map.keys())
-            )
-
-            obs_date = st.date_input("تاريخ القياس")
-            height = st.number_input(
-                "ارتفاع النبات (cm)", min_value=0.0
-            )
-            width = st.number_input(
-                "عرض المجموع الخضري (cm)", min_value=0.0
-            )
-            leaves = st.number_input(
-                "عدد الأوراق", min_value=0, step=1
-            )
-            leaf_area = st.number_input(
-                "مساحة الأوراق (cm²)", min_value=0.0
-            )
-            stage = st.text_input("مرحلة النمو")
-            notes = st.text_area("ملاحظات بصرية")
-
-            submit = st.form_submit_button("حفظ")
-
-            if submit:
-                execute("""
-                INSERT INTO plant_observations
-                (plant_id, observation_date,
-                 plant_height_cm, canopy_width_cm,
-                 leaf_number, leaf_area_cm2,
-                 growth_stage, visual_notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    plant_map[selected], str(obs_date),
-                    height, width, leaves, leaf_area,
-                    stage, notes
-                ))
-
-                st.success("تم حفظ قياسات النبات.")
-                st.rerun()
-
-    st.dataframe(query("""
-        SELECT po.*, p.plant_code
-        FROM plant_observations po
-        JOIN plants p ON p.id=po.plant_id
-    """), use_container_width=True)
-
-# --------------------------------------------------
-# Irrigation
-# --------------------------------------------------
-
-elif page == "إدارة الري":
-
-    st.header("تسجيل عمليات الري")
-
-    plots = query("SELECT * FROM plots")
-
-    if not plots.empty:
-
-        plot_map = dict(zip(plots["plot_code"], plots["id"]))
-
-        with st.form("irrigation_form"):
-
-            plot = st.selectbox("القطعة", list(plot_map.keys()))
-            start = st.text_input(
-                "وقت البداية", datetime.now().isoformat(timespec="minutes")
-            )
-            end = st.text_input("وقت النهاية")
-            volume = st.number_input(
-                "كمية المياه (Liter)", min_value=0.0
-            )
-            method = st.selectbox(
-                "طريقة الري", ["Drip", "Surface drip", "Subsurface drip"]
-            )
-            notes = st.text_area("ملاحظات")
-
-            submit = st.form_submit_button("حفظ عملية الري")
-
-            if submit:
-                execute("""
-                INSERT INTO irrigation_events
-                (plot_id, start_time, end_time,
-                 water_volume_liter, irrigation_method, notes)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    plot_map[plot], start, end,
-                    volume, method, notes
-                ))
-
-                st.success("تم تسجيل عملية الري.")
-                st.rerun()
-
-    st.dataframe(query("""
-        SELECT i.*, p.plot_code
-        FROM irrigation_events i
-        JOIN plots p ON p.id=i.plot_id
-    """), use_container_width=True)
-
-# --------------------------------------------------
-# Fertigation
-# --------------------------------------------------
-
-elif page == "إدارة التسميد":
-
-    st.header("تسجيل عمليات التسميد")
-
-    plots = query("SELECT * FROM plots")
-
-    if not plots.empty:
-
-        plot_map = dict(zip(plots["plot_code"], plots["id"]))
-
-        with st.form("fertigation_form"):
-
-            plot = st.selectbox("القطعة", list(plot_map.keys()))
-            event_date = st.date_input("التاريخ")
-            fertilizer = st.text_input("اسم السماد")
-            nitrogen = st.number_input("N (g)", min_value=0.0)
-            phosphorus = st.number_input("P (g)", min_value=0.0)
-            potassium = st.number_input("K (g)", min_value=0.0)
-            total = st.number_input("إجمالي كمية السماد (g)", min_value=0.0)
-            notes = st.text_area("ملاحظات")
-
-            submit = st.form_submit_button("حفظ التسميد")
-
-            if submit:
-                execute("""
-                INSERT INTO fertigation_events
-                (plot_id, event_date, fertilizer_name,
-                 nitrogen_g, phosphorus_g, potassium_g,
-                 total_amount_g, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    plot_map[plot], str(event_date),
-                    fertilizer, nitrogen, phosphorus,
-                    potassium, total, notes
-                ))
-
-                st.success("تم حفظ عملية التسميد.")
-                st.rerun()
-
-    st.dataframe(query("""
-        SELECT f.*, p.plot_code
-        FROM fertigation_events f
-        JOIN plots p ON p.id=f.plot_id
-    """), use_container_width=True)
-
-# --------------------------------------------------
-# Harvest
-# --------------------------------------------------
-
-elif page == "تسجيل الحصاد":
-
-    st.header("تسجيل الإنتاجية")
-
-    plots = query("SELECT * FROM plots")
-
-    if not plots.empty:
-
-        plot_map = dict(zip(plots["plot_code"], plots["id"]))
-
-        with st.form("harvest_form"):
-
-            plot = st.selectbox("القطعة", list(plot_map.keys()))
-            harvest_date = st.date_input("تاريخ الحصاد")
-            fruits = st.number_input(
-                "عدد الثمار", min_value=0, step=1
-            )
-            yield_kg = st.number_input(
-                "وزن المحصول (kg)", min_value=0.0
-            )
-            average = st.number_input(
-                "متوسط وزن الثمرة (g)", min_value=0.0
-            )
-            notes = st.text_area("ملاحظات")
-
-            submit = st.form_submit_button("حفظ الحصاد")
-
-            if submit:
-                execute("""
-                INSERT INTO harvests
-                (plot_id, harvest_date, fruit_number,
-                 yield_kg, average_fruit_weight_g, notes)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    plot_map[plot], str(harvest_date),
-                    fruits, yield_kg, average, notes
-                ))
-
-                st.success("تم تسجيل الحصاد.")
-                st.rerun()
-
-    st.dataframe(query("""
-        SELECT h.*, p.plot_code
-        FROM harvests h
-        JOIN plots p ON p.id=h.plot_id
-    """), use_container_width=True)
-
-# --------------------------------------------------
-# Sensors
-# --------------------------------------------------
-
-elif page == "بيانات الحساسات":
-
-    st.header("إدارة الحساسات")
-
-    plots = query("SELECT * FROM plots")
-
-    if not plots.empty:
-
-        plot_map = dict(zip(plots["plot_code"], plots["id"]))
-
-        with st.form("sensor_form"):
-
-            device = st.text_input("كود الجهاز")
-            sensor_type = st.selectbox(
-                "نوع الحساس",
-                [
-                    "Soil Moisture",
-                    "Soil EC",
-                    "Soil pH",
-                    "Water EC",
-                    "Water pH",
-                    "Temperature",
-                    "Humidity",
-                    "Flow Meter",
-                    "Load Cell"
-                ]
-            )
-            plot = st.selectbox("القطعة", list(plot_map.keys()))
-            unit = st.text_input("وحدة القياس")
-
-            submit = st.form_submit_button("تسجيل الحساس")
-
-            if submit:
-                if device.strip():
-                    execute("""
-                    INSERT INTO sensors
-                    (device_code, sensor_type, plot_id, unit)
-                    VALUES (?, ?, ?, ?)
-                    """, (
-                        device, sensor_type, plot_map[plot], unit
-                    ))
-                    st.success("تم تسجيل الحساس.")
-                    st.rerun()
-
-    st.subheader("الحساسات المسجلة")
-    st.dataframe(query("SELECT * FROM sensors"),
-                 use_container_width=True)
-
-    st.info(
-        "استقبال القراءات الفعلية من Arduino وESP8266 "
-        "سيتم تفعيله بعد بناء واجهة الاتصال."
+    root_depth = st.slider(
+        "Root depth (m)", 0.10, 0.80, 0.35, 0.05
     )
 
-# --------------------------------------------------
-# AI decisions
-# --------------------------------------------------
+    initial_theta = st.slider(
+        "Initial soil moisture (%)", 5.0, 55.0, 28.0, 0.5
+    ) / 100
 
-elif page == "الذكاء الاصطناعي":
+    st.divider()
+    st.subheader("Irrigation and fertilization")
 
-    st.header("محرك الذكاء الاصطناعي")
+    irrigation_pct = st.select_slider(
+        "Irrigation (% ETc)",
+        options=[60, 75, 90, 100, 105],
+        value=90,
+    )
 
+    fertilizer_pct = st.select_slider(
+        "Fertilizer (% reference)",
+        options=[25, 50, 75, 100],
+        value=75,
+    )
+
+    irrigation_eff = st.slider(
+        "Irrigation efficiency (%)", 60, 100, 90
+    ) / 100
+
+    initial_lai = st.slider(
+        "Initial LAI", 0.05, 1.0, 0.15, 0.05
+    )
+
+    initial_biomass = st.number_input(
+        "Initial biomass (t/ha)",
+        0.0, 5.0, 0.05, 0.01
+    )
+
+if wp >= fc:
+    st.error("Wilting point must be lower than field capacity.")
+    st.stop()
+
+st.header("Weather data")
+
+weather_file = st.file_uploader(
+    "Upload daily weather CSV",
+    type=["csv"],
+)
+
+if weather_file is not None:
+    try:
+        weather = pd.read_csv(weather_file)
+
+        missing = [
+            col for col in REQUIRED_WEATHER_COLUMNS
+            if col not in weather.columns
+        ]
+
+        if missing:
+            st.error(f"Missing columns: {missing}")
+            st.stop()
+
+        weather = weather.head(crop_days).copy()
+
+        if len(weather) < crop_days:
+            crop_days = len(weather)
+
+        weather_source = "Uploaded weather data"
+
+    except Exception as exc:
+        st.error(f"Weather file error: {exc}")
+        st.stop()
+else:
+    weather = None
+    weather_source = "Literature-based assumed weather"
+
+params = {
+    "days": crop_days,
+    "fc": fc,
+    "wp": wp,
+    "root_depth_m": root_depth,
+    "initial_theta": initial_theta,
+    "irrigation_pct": irrigation_pct,
+    "fertilizer_pct": fertilizer_pct,
+    "irrigation_efficiency": irrigation_eff,
+    "initial_lai": initial_lai,
+    "initial_biomass_t_ha": initial_biomass,
+    "area_m2": area_m2,
+    "plant_density": plant_density,
+}
+
+if "active_result" not in st.session_state:
+    st.session_state.active_result = None
+
+col1, col2 = st.columns([1, 4])
+
+with col1:
+    run_now = st.button(
+        "Run Digital Twin",
+        type="primary",
+        use_container_width=True,
+    )
+
+with col2:
+    st.caption(f"Weather source: {weather_source}")
+
+if run_now or st.session_state.active_result is None:
+    st.session_state.active_result = simulate_crop(
+        params, weather
+    )
+
+result = st.session_state.active_result
+df = result["daily"]
+summary = result["summary"]
+
+if weather is None:
     st.warning(
-        "لا يوجد نموذج مدرب في هذه النسخة. "
-        "لن نعرض تنبؤات أو توصيات زراعية باعتبارها نتائج علمية."
+        "Weather and some crop parameters are assumed or "
+        "literature-based. Simulation outputs are not field measurements."
     )
 
-    st.subheader("تسجيل قرار بحثي مقترح")
+st.header("Greenhouse status")
 
-    plots = query("SELECT * FROM plots")
+c1, c2, c3, c4, c5 = st.columns(5)
 
-    if not plots.empty:
+c1.metric(
+    "Soil moisture",
+    f"{df.Soil_Moisture_pct.iloc[-1]:.1f}%"
+)
 
-        plot_map = dict(zip(plots["plot_code"], plots["id"]))
+c2.metric(
+    "Seasonal ETa",
+    f"{df.ETa_mm.sum():.1f} mm"
+)
 
-        with st.form("decision_form"):
+c3.metric(
+    "Applied irrigation",
+    f"{df.Irrigation_mm.sum():.1f} mm"
+)
 
-            plot = st.selectbox("القطعة", list(plot_map.keys()))
+c4.metric(
+    "Final LAI",
+    f"{df.LAI.iloc[-1]:.2f}"
+)
 
-            decision_type = st.selectbox(
-                "نوع القرار",
-                ["Irrigation", "Fertigation", "Combined"]
-            )
+c5.metric(
+    "Final biomass",
+    f"{df.Biomass_t_ha.iloc[-1]:.2f} t/ha"
+)
 
-            water = st.number_input(
-                "المياه المقترحة (Liter)", min_value=0.0
-            )
-            n = st.number_input("N (g)", min_value=0.0)
-            p = st.number_input("P (g)", min_value=0.0)
-            k = st.number_input("K (g)", min_value=0.0)
+tabs = st.tabs([
+    "Overview",
+    "Soil and Water",
+    "Crop Growth",
+    "Scenarios",
+    "Artificial Intelligence",
+    "Literature Data",
+    "Export Data",
+    "Scientific Notes",
+])
 
-            explanation = st.text_area("سبب القرار")
-            model = st.text_input("اسم النموذج", "Manual research entry")
+with tabs[0]:
+    st.subheader("Soil moisture development")
 
-            submit = st.form_submit_button("تسجيل القرار")
+    fig = px.line(
+        df,
+        x="Day",
+        y="Soil_Moisture_pct",
+        title="Daily soil moisture",
+    )
 
-            if submit:
-                execute("""
-                INSERT INTO ai_decisions
-                (plot_id, decision_time, decision_type,
-                 recommended_water_liter,
-                 recommended_nitrogen_g,
-                 recommended_phosphorus_g,
-                 recommended_potassium_g,
-                 model_name, explanation)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    plot_map[plot],
-                    datetime.now().isoformat(timespec="seconds"),
-                    decision_type, water, n, p, k,
-                    model, explanation
-                ))
+    st.plotly_chart(fig, use_container_width=True)
 
-                st.success("تم تسجيل القرار كاقتراح غير منفذ.")
-                st.rerun()
+    st.subheader("Leaf Area Index")
 
-    st.subheader("سجل القرارات")
+    fig = px.line(
+        df,
+        x="Day",
+        y="LAI",
+        title="LAI development",
+    )
 
-    st.dataframe(query("""
-        SELECT d.*, p.plot_code
-        FROM ai_decisions d
-        LEFT JOIN plots p ON p.id=d.plot_id
-        ORDER BY d.decision_time DESC
-    """), use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-# --------------------------------------------------
-# Database
-# --------------------------------------------------
-
-elif page == "قاعدة البيانات":
-
-    st.header("عرض جداول قاعدة البيانات")
-
-    tables = [
-        "experiments",
-        "treatments",
-        "plots",
-        "plants",
-        "plot_observations",
-        "plant_observations",
-        "irrigation_events",
-        "fertigation_events",
-        "harvests",
-        "sensors",
-        "sensor_readings",
-        "ai_decisions",
-        "control_executions"
-    ]
-
-    selected_table = st.selectbox("اختر الجدول", tables)
-
-    df = query(f"SELECT * FROM {selected_table}")
-
+    st.subheader("Daily simulation data")
     st.dataframe(df, use_container_width=True)
 
-    csv = df.to_csv(index=False).encode("utf-8-sig")
+with tabs[1]:
+    st.subheader("Soil-water balance")
+
+    fig = px.line(
+        df,
+        x="Day",
+        y=["ETc_mm", "ETa_mm", "Irrigation_mm"],
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    fig = px.line(
+        df,
+        x="Day",
+        y=["Depletion_mm", "Drainage_mm"],
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.json(summary)
+
+with tabs[2]:
+    st.subheader("Crop growth")
+
+    fig = px.line(
+        df,
+        x="Day",
+        y="Biomass_t_ha",
+        title="Biomass development",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    fig = px.line(
+        df,
+        x="Day",
+        y=["Ks", "Nutrient_Factor"],
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.metric(
+        "Illustrative fruit yield",
+        f"{summary['Illustrative_Fruit_Yield_t_ha']:.2f} t/ha",
+    )
+
+    st.warning(
+        "Fruit yield is currently an illustrative estimate, "
+        "not a validated prediction."
+    )
+
+with tabs[3]:
+    st.subheader("Irrigation and fertilizer scenarios")
+
+    irrigation_options = st.multiselect(
+        "Irrigation levels",
+        [60, 75, 90, 100, 105],
+        default=[75, 90, 105],
+    )
+
+    fertilizer_options = st.multiselect(
+        "Fertilizer levels",
+        [25, 50, 75, 100],
+        default=[50, 75, 100],
+    )
+
+    if st.button("Compare scenarios"):
+        scenarios = compare_scenarios(
+            params,
+            weather,
+            irrigation_options,
+            fertilizer_options,
+        )
+
+        st.session_state.scenarios = scenarios
+
+    if "scenarios" in st.session_state:
+        sc = st.session_state.scenarios
+
+        st.dataframe(sc, use_container_width=True)
+
+        fig = px.scatter(
+            sc,
+            x="Irrigation_Total_mm",
+            y="Simulated_Biomass_t_ha",
+            color="Fertilizer_pct",
+            size="Final_LAI",
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+with tabs[4]:
+    st.subheader("Pretrained Artificial Intelligence")
+
+    if (
+        PRETRAINED_MODEL_PATH.exists()
+        and PRETRAINED_REPORT_PATH.exists()
+    ):
+        report = json.loads(
+            PRETRAINED_REPORT_PATH.read_text(
+                encoding="utf-8"
+            )
+        )
+
+        st.success(
+            f"AI model available: "
+            f"{report['total_scenarios']:,} scenarios"
+        )
+
+        st.warning(
+            "This model was trained on simulated data. "
+            "It predicts simulator-equivalent outputs, "
+            "not independently validated real crop measurements."
+        )
+
+        metrics_df = pd.DataFrame(
+            report["metrics_by_target"]
+        ).T.reset_index(names="Predicted variable")
+
+        st.subheader("AI performance")
+        st.dataframe(metrics_df, use_container_width=True)
+
+        if st.button(
+            "Predict crop growth using AI",
+            type="primary",
+        ):
+            source = (
+                weather
+                if weather is not None
+                else result["daily"]
+            )
+
+            features = pd.DataFrame([{
+                "Days": params["days"],
+                "Irrigation_pct": params["irrigation_pct"],
+                "Fertilizer_pct": params["fertilizer_pct"],
+                "Field_Capacity_pct": params["fc"] * 100,
+                "Wilting_Point_pct": params["wp"] * 100,
+                "Root_Depth_m": params["root_depth_m"],
+                "Initial_Moisture_pct": params["initial_theta"] * 100,
+                "Irrigation_Efficiency_pct": (
+                    params["irrigation_efficiency"] * 100
+                ),
+                "Initial_LAI": params["initial_lai"],
+                "Initial_Biomass_t_ha": (
+                    params["initial_biomass_t_ha"]
+                ),
+                "Mean_Temperature_C": (
+                    source["Temperature_C"].mean()
+                ),
+                "Mean_ETo_mm": source["ETo_mm"].mean(),
+                "Mean_Solar_MJ_m2": (
+                    source["Solar_MJ_m2"].mean()
+                ),
+                "Plant_Density": params["plant_density"],
+            }])
+
+            prediction = predict_with_pretrained_model(
+                features
+            )
+
+            st.subheader("AI prediction")
+            st.dataframe(
+                prediction,
+                use_container_width=True,
+            )
+
+            st.caption(
+                "These predictions approximate the simulator "
+                "and are not validated field predictions."
+            )
+
+        with st.expander("View AI training data"):
+            if PRETRAINED_DATA_PATH.exists():
+                training_data = pd.read_csv(
+                    PRETRAINED_DATA_PATH
+                )
+
+                st.write(
+                    f"Training dataset: "
+                    f"{len(training_data):,} rows"
+                )
+
+                st.dataframe(
+                    training_data.head(30),
+                    use_container_width=True,
+                )
+
+                st.download_button(
+                    "Download training data",
+                    training_data.to_csv(
+                        index=False
+                    ).encode("utf-8-sig"),
+                    file_name="AI_SIMULATED_TRAINING_DATA.csv",
+                    mime="text/csv",
+                )
+
+    else:
+        st.error(
+            "AI model files are missing. "
+            "The model files must be uploaded with the project."
+        )
+
+    st.divider()
+    st.subheader("Literature-trained model")
+
+    literature_report_path = (
+        Path(__file__).parent / "LITERATURE_AI_REPORT.json"
+    )
+
+    if (
+        LITERATURE_MODEL_PATH.exists()
+        and literature_report_path.exists()
+    ):
+        literature_report = json.loads(
+            literature_report_path.read_text(
+                encoding="utf-8"
+            )
+        )
+
+        st.success(
+            "Literature model is available."
+        )
+
+        st.json(literature_report)
+
+    else:
+        st.warning(
+            "Literature model report or model file is missing."
+        )
+
+    st.divider()
+    st.subheader("Train with future experimental data")
+
+    st.write(
+        "Upload plot-level experimental measurements "
+        "when available. Do not label simulated data as field data."
+    )
+
+    st.code(
+        "Plot_ID,Season,Mechanistic_Biomass_t_ha,"
+        "Mean_LAI,Seasonal_ETa_mm,Mean_Temperature_C,"
+        "Measured_Biomass_t_ha"
+    )
+
+    ai_file = st.file_uploader(
+        "Upload experimental CSV",
+        type=["csv"],
+        key="ai_upload",
+    )
+
+    if ai_file is not None:
+        ai_data = pd.read_csv(ai_file)
+
+        st.dataframe(ai_data.head(10))
+
+        if st.button("Train experimental correction"):
+            try:
+                report_exp = train_residual_model(ai_data)
+
+                st.success("Experimental model training completed.")
+
+                st.write(report_exp)
+
+            except Exception as exc:
+                st.error(str(exc))
+
+with tabs[5]:
+    st.subheader("Published literature data")
+
+    literature_path = (
+        Path(__file__).parent
+        / "LITERATURE_TREATMENT_DATA.csv"
+    )
+
+    provenance_path = (
+        Path(__file__).parent
+        / "PARAMETER_PROVENANCE.csv"
+    )
+
+    if literature_path.exists():
+        literature = pd.read_csv(literature_path)
+        st.dataframe(
+            literature,
+            use_container_width=True,
+        )
+    else:
+        st.warning("Literature data file is missing.")
+
+    if provenance_path.exists():
+        provenance = pd.read_csv(provenance_path)
+
+        st.subheader("Parameter sources")
+        st.dataframe(
+            provenance,
+            use_container_width=True,
+        )
+
+with tabs[6]:
+    st.subheader("Export simulation results")
 
     st.download_button(
-        "تحميل البيانات CSV",
-        csv,
-        file_name=f"{selected_table}.csv",
-        mime="text/csv"
+        "Download daily simulation CSV",
+        df.to_csv(index=False).encode("utf-8-sig"),
+        file_name="pepper_digital_twin_simulation.csv",
+        mime="text/csv",
     )
+
+    st.subheader("Experimental data template")
+
+    columns = [
+        "Season",
+        "Plot_ID",
+        "Treatment",
+        "Date",
+        "DAT",
+        "Temperature_C",
+        "RH_pct",
+        "Solar_MJ_m2",
+        "ETo_mm",
+        "Soil_Moisture_pct",
+        "Irrigation_mm",
+        "Fertilizer_N_kg_ha",
+        "Fertilizer_P_kg_ha",
+        "Fertilizer_K_kg_ha",
+        "EC_dS_m",
+        "pH",
+        "LAI",
+        "Plant_Height_cm",
+        "Measured_Biomass_t_ha",
+        "Fruit_Number_per_Plant",
+        "Mean_Fruit_Weight_g",
+        "Marketable_Yield_t_ha",
+    ]
+
+    template = pd.DataFrame(columns=columns)
+
+    st.download_button(
+        "Download experimental template",
+        template.to_csv(index=False).encode("utf-8-sig"),
+        file_name="pepper_experimental_template.csv",
+        mime="text/csv",
+    )
+
+with tabs[7]:
+    st.subheader("Scientific notes and limitations")
+
+    st.markdown("""
+- Weather data are literature-based or assumed.
+- Soil-water balance uses a simplified root-zone bucket.
+- Crop growth parameters require calibration.
+- Nutrient response is a simplified proxy.
+- Fruit yield is not independently validated.
+- AI was pretrained on simulated scenarios.
+- Literature model uses published treatment means.
+- Real greenhouse data are needed for independent validation.
+- Repeated readings from one plot are not independent replicates.
+""")
+
+    st.info(
+        "This is a research prototype, not a certified "
+        "irrigation or fertigation controller."
+    )
+
+st.divider()
+
+st.caption(
+    "Pepper Greenhouse Digital Twin | Research prototype"
+)
