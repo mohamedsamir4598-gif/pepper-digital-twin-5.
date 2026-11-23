@@ -1,885 +1,773 @@
 
 import streamlit as st
 import pandas as pd
-import numpy as np
-from datetime import datetime
-import os
+import plotly.express as px
 
-# ==========================================
-# إعدادات الصفحة
-# ==========================================
+from datetime import datetime, date
+from database import get_connection, initialize_database
 
 st.set_page_config(
-    page_title="التوأم الرقمي الذكي لمحصول الفلفل",
+    page_title="Pepper Digital Twin",
     page_icon="🌱",
     layout="wide"
 )
 
-# ==========================================
-# تنسيق الواجهة العربية RTL
-# ==========================================
+initialize_database()
+
+def query(sql, params=()):
+    conn = get_connection()
+    df = pd.read_sql_query(sql, conn, params=params)
+    conn.close()
+    return df
+
+def execute(sql, params=()):
+    conn = get_connection()
+    conn.execute(sql, params)
+    conn.commit()
+    conn.close()
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap');
-
-html, body, [class*="css"] {
-    font-family: 'Cairo', sans-serif;
-    direction: rtl;
-}
-
 .main {
     direction: rtl;
 }
-
-h1, h2, h3, p, label {
-    text-align: right;
-}
-
-div[data-testid="stMetric"] {
-    direction: rtl;
-    text-align: right;
-    border: 1px solid #dddddd;
-    padding: 12px;
-    border-radius: 10px;
-}
-
-.stButton button {
-    width: 100%;
-    font-family: 'Cairo', sans-serif;
-    font-weight: bold;
-}
-
-.notice {
-    padding: 14px;
-    border-radius: 10px;
-    background-color: #fff3cd;
-    color: #664d03;
-    direction: rtl;
-    text-align: right;
-    margin-bottom: 15px;
-}
-
-.info-box {
-    padding: 14px;
-    border-radius: 10px;
-    background-color: #e8f3ff;
-    color: #084298;
-    direction: rtl;
-    text-align: right;
-    margin-bottom: 15px;
+.block-container {
+    padding-top: 2rem;
 }
 </style>
 """, unsafe_allow_html=True)
 
-
-# ==========================================
-# عنوان البرنامج
-# ==========================================
-
-st.title("🌱 التوأم الرقمي الذكي لمحصول الفلفل")
-
-st.markdown("""
-نظام بحثي تفاعلي لمتابعة حالة النبات والتربة والمياه والبيئة،
-وتقديم مؤشرات أولية لدعم قرارات الري والتسميد.
-""")
-
-st.markdown("""
-<div class="notice">
-<strong>تنبيه بحثي:</strong>
-هذه النسخة نموذج أولي. الحسابات والحدود المستخدمة تحتاج إلى
-معايرة وفق نوع التربة والصنف ومرحلة النمو والظروف التجريبية.
-لا تستخدم النتائج للتحكم الفعلي في الصمامات أو المضخات.
-</div>
-""", unsafe_allow_html=True)
-
-
-# ==========================================
-# تهيئة سجل البيانات
-# ==========================================
-
-if "records" not in st.session_state:
-    st.session_state.records = []
-
-
-# ==========================================
-# دوال مساعدة
-# ==========================================
-
-def safe_divide(a, b):
-    if b == 0:
-        return 0
-    return a / b
-
-
-def analyze_notes(notes):
-    """
-    تحليل مبدئي للكلمات المفتاحية فقط.
-    لا يمثل تشخيصًا مرضيًا أو نموذج ذكاء اصطناعي.
-    """
-
-    text = notes.strip().lower()
-
-    findings = []
-
-    keywords = {
-        "ذبول": "قد يرتبط بإجهاد مائي أو مشكلة في الجذور أو الملوحة.",
-        "منكمش": "قد يشير إلى إجهاد مائي أو حراري أو مشكلة فسيولوجية.",
-        "اصفرار": "قد يرتبط بنقص عناصر غذائية أو زيادة الري أو مشكلات الجذور.",
-        "احتراق": "قد يرتبط بإجهاد ملحي أو حراري أو مشكلة تغذوية.",
-        "بقع": "تحتاج إلى فحص بصري لتحديد طبيعة البقع وموقعها.",
-        "عفن": "يحتاج إلى فحص الجذور أو الأنسجة المصابة.",
-        "حشرات": "يُنصح بفحص السطحين العلوي والسفلي للأوراق.",
-        "تساقط": "قد يرتبط بالإجهاد الحراري أو المائي أو ضعف التلقيح.",
-        "تجعد": "قد يرتبط بإجهاد بيئي أو تغذوي أو إصابة حشرية."
-    }
-
-    for word, message in keywords.items():
-        if word in text:
-            findings.append((word, message))
-
-    return findings
-
-
-def calculate_depletion(fc, wp, moisture):
-    """
-    حساب نسبة استنزاف الماء المتاح بين السعة الحقلية
-    ونقطة الذبول، باستخدام نفس أساس وحدات الرطوبة.
-    """
-
-    available_water = fc - wp
-
-    if available_water <= 0:
-        return None
-
-    depletion = (fc - moisture) / available_water
-
-    return float(np.clip(depletion, 0, 1))
-
-
-def calculate_water_deficit(fc, moisture, root_depth):
-    """
-    تقدير عمق العجز المائي النظري بالملليمتر.
-    الرطوبة والسعة الحقلية كنسبة حجمية %.
-    عمق الجذور بالمتر.
-    """
-
-    difference = max(fc - moisture, 0) / 100
-
-    deficit_mm = difference * root_depth * 1000
-
-    return deficit_mm
-
-
-# ==========================================
-# الشريط الجانبي
-# ==========================================
-
-st.sidebar.header("⚙️ إعداد التجربة")
-
-experiment_name = st.sidebar.text_input(
-    "اسم التجربة",
-    "تجربة الفلفل رقم 1"
-)
-
-crop_variety = st.sidebar.text_input(
-    "صنف الفلفل",
-    "فلفل"
-)
-
-plant_age = st.sidebar.number_input(
-    "عمر النبات (يوم)",
-    min_value=0,
-    max_value=365,
-    value=30
-)
-
-growth_stage = st.sidebar.selectbox(
-    "مرحلة النمو",
-    [
-        "مرحلة النمو الخضري",
-        "مرحلة التزهير",
-        "مرحلة العقد",
-        "مرحلة نمو الثمار",
-        "مرحلة الحصاد"
-    ]
-)
-
-observation_date = st.sidebar.date_input(
-    "تاريخ القياس",
-    datetime.today().date()
-)
-
-st.sidebar.divider()
-
-st.sidebar.info(
-    "وضع التشغيل الحالي: دعم القرار فقط. "
-    "لا يوجد اتصال فعلي بالحساسات أو وحدات التحكم."
-)
-
-
-# ==========================================
-# التبويبات
-# ==========================================
-
-tabs = st.tabs([
-    "🏠 لوحة التحكم",
-    "🌤️ البيئة",
-    "🌱 التربة",
-    "💧 المياه والتسميد",
-    "🍃 النبات",
-    "📝 ملاحظات الباحث",
-    "📊 سجل البيانات"
-])
-
-
-# ==========================================
-# 1- لوحة التحكم
-# ==========================================
-
-with tabs[0]:
-
-    st.header("لوحة متابعة التوأم الرقمي")
-
-    st.write(
-        "تعرض هذه الصفحة ملخصًا لحالة التجربة بناءً على "
-        "القياسات التي تدخلها في الصفحات التالية."
-    )
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("عمر النبات", f"{plant_age} يوم")
-    col2.metric("مرحلة النمو", growth_stage)
-    col3.metric("صنف المحصول", crop_variety)
-
-    st.divider()
-
-    st.subheader("مكونات النظام")
-
-    c1, c2, c3 = st.columns(3)
-
-    c1.info("🌤️ مراقبة الظروف البيئية")
-    c2.info("🌱 متابعة حالة التربة")
-    c3.info("💧 متابعة مياه الري والتسميد")
-
-    c4, c5, c6 = st.columns(3)
-
-    c4.info("🍃 متابعة نمو النبات")
-    c5.info("🤖 دعم قرارات الإدارة")
-    c6.info("📊 تسجيل وتحليل البيانات")
-
-    st.markdown("""
-    <div class="info-box">
-    <strong>فكرة التوأم الرقمي:</strong>
-    يتم إنشاء تمثيل رقمي لحالة النبات والتربة والبيئة،
-    ثم مقارنة القياسات الفعلية بالحالة المتوقعة،
-    واستخدام النتائج لتحسين قرارات الإدارة الزراعية.
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# ==========================================
-# 2- بيانات البيئة
-# ==========================================
-
-with tabs[1]:
-
-    st.header("🌤️ بيانات البيئة المحيطة")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        air_temp = st.number_input(
-            "درجة حرارة الهواء (°C)",
-            min_value=-5.0,
-            max_value=60.0,
-            value=28.0
-        )
-
-        relative_humidity = st.number_input(
-            "الرطوبة النسبية (%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=65.0
-        )
-
-        solar_radiation = st.number_input(
-            "الإشعاع الشمسي (W/m²)",
-            min_value=0.0,
-            max_value=1500.0,
-            value=500.0
-        )
-
-    with col2:
-
-        wind_speed = st.number_input(
-            "سرعة الهواء (m/s)",
-            min_value=0.0,
-            max_value=30.0,
-            value=1.0
-        )
-
-        forecast_temp = st.number_input(
-            "درجة الحرارة المتوقعة (°C)",
-            min_value=-5.0,
-            max_value=60.0,
-            value=30.0
-        )
-
-        rain_forecast = st.number_input(
-            "الأمطار المتوقعة (mm)",
-            min_value=0.0,
-            max_value=300.0,
-            value=0.0
-        )
-
-    st.caption(
-        "يمكن لاحقًا ربط هذه المدخلات بمحطة طقس أو خدمة توقعات جوية."
-    )
-
-
-# ==========================================
-# 3- بيانات التربة
-# ==========================================
-
-with tabs[2]:
-
-    st.header("🌱 بيانات التربة")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        soil_moisture = st.number_input(
-            "الرطوبة الحجمية الحالية VWC (%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=25.0
-        )
-
-        field_capacity = st.number_input(
-            "السعة الحقلية FC (%)",
-            min_value=0.1,
-            max_value=100.0,
-            value=35.0
-        )
-
-        wilting_point = st.number_input(
-            "نقطة الذبول WP (%)",
-            min_value=0.0,
-            max_value=99.0,
-            value=15.0
-        )
-
-    with col2:
-
-        root_depth = st.number_input(
-            "عمق منطقة الجذور (m)",
-            min_value=0.01,
-            max_value=2.0,
-            value=0.30
-        )
-
-        soil_ec = st.number_input(
-            "التوصيل الكهربائي للتربة EC (dS/m)",
-            min_value=0.0,
-            max_value=30.0,
-            value=1.5
-        )
-
-        soil_ph = st.number_input(
-            "درجة حموضة التربة pH",
-            min_value=0.0,
-            max_value=14.0,
-            value=6.5
-        )
-
-    if wilting_point >= field_capacity:
-        st.error("يجب أن تكون السعة الحقلية أكبر من نقطة الذبول.")
-
-    elif soil_moisture > 100:
-        st.error("قيمة الرطوبة غير صحيحة.")
-
-    else:
-        st.success("تم إدخال بيانات التربة.")
-
-
-# ==========================================
-# 4- بيانات المياه والتسميد
-# ==========================================
-
-with tabs[3]:
-
-    st.header("💧 بيانات مياه الري والمحلول المغذي")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        irrigation_ec = st.number_input(
-            "ملوحة مياه الري EC (dS/m)",
-            min_value=0.0,
-            max_value=30.0,
-            value=0.8
-        )
-
-        irrigation_ph = st.number_input(
-            "pH مياه الري",
-            min_value=0.0,
-            max_value=14.0,
-            value=6.5
-        )
-
-        flow_rate = st.number_input(
-            "تصرف نظام الري (L/h)",
-            min_value=0.0,
-            max_value=100000.0,
-            value=6.0
-        )
-
-    with col2:
-
-        nitrogen = st.number_input(
-            "تركيز النيتروجين N (mg/L)",
-            min_value=0.0,
-            max_value=5000.0,
-            value=100.0
-        )
-
-        phosphorus = st.number_input(
-            "تركيز الفوسفور P (mg/L)",
-            min_value=0.0,
-            max_value=5000.0,
-            value=20.0
-        )
-
-        potassium = st.number_input(
-            "تركيز البوتاسيوم K (mg/L)",
-            min_value=0.0,
-            max_value=5000.0,
-            value=120.0
-        )
-
-    st.caption(
-        "أدخل التركيز الفعلي المقاس أو المحسوب للمحلول. "
-        "هذه القيم لا تمثل توصية تسميد عامة."
-    )
-
-
-# ==========================================
-# 5- بيانات النبات
-# ==========================================
-
-with tabs[4]:
-
-    st.header("🍃 القياسات الفسيولوجية والنمو الخضري")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        plant_height = st.number_input(
-            "ارتفاع النبات (cm)",
-            min_value=0.0,
-            max_value=500.0,
-            value=35.0
-        )
-
-        leaf_count = st.number_input(
-            "عدد الأوراق",
-            min_value=0,
-            max_value=10000,
-            value=18
-        )
-
-        lai = st.number_input(
-            "دليل مساحة الأوراق LAI",
-            min_value=0.0,
-            max_value=20.0,
-            value=1.5
-        )
-
-    with col2:
-
-        stem_diameter = st.number_input(
-            "قطر الساق (mm)",
-            min_value=0.0,
-            max_value=100.0,
-            value=8.0
-        )
-
-        flower_count = st.number_input(
-            "عدد الأزهار",
-            min_value=0,
-            max_value=10000,
-            value=5
-        )
-
-        fruit_count = st.number_input(
-            "عدد الثمار",
-            min_value=0,
-            max_value=10000,
-            value=2
-        )
-
-    st.subheader("بيانات الإنتاج")
-
-    harvested_fruits = st.number_input(
-        "عدد الثمار المحصودة",
-        min_value=0,
-        max_value=100000,
-        value=0
-    )
-
-    harvested_weight = st.number_input(
-        "وزن المحصول المحصود (kg)",
-        min_value=0.0,
-        max_value=100000.0,
-        value=0.0
-    )
-
-
-# ==========================================
-# 6- ملاحظات الباحث
-# ==========================================
-
-with tabs[5]:
-
-    st.header("📝 التفاعل مع الباحث")
-
-    st.write(
-        "اكتب وصفًا لما تلاحظه على النباتات. "
-        "سيبحث البرنامج عن بعض الكلمات المفتاحية "
-        "ويعرض احتمالات أولية للفحص."
-    )
-
-    researcher_notes = st.text_area(
-        "اكتب ملاحظاتك هنا",
-        placeholder=(
-            "مثال: لاحظت اصفرار الأوراق السفلية "
-            "وانكماش بعض الأوراق..."
-        ),
-        height=150
-    )
-
-    uploaded_image = st.file_uploader(
-        "ارفع صورة للنبات (اختياري)",
-        type=["jpg", "jpeg", "png"]
-    )
-
-    if uploaded_image is not None:
-        st.image(
-            uploaded_image,
-            caption="الصورة المرفوعة",
+st.title("🌱 Pepper Digital Twin")
+st.caption("Smart Irrigation and Fertigation Management System")
+
+menu = [
+    "لوحة التحكم",
+    "إدارة التجارب",
+    "إدارة المعاملات",
+    "إدارة القطع والنباتات",
+    "تسجيل قياسات التربة والجو",
+    "تسجيل نمو النبات",
+    "إدارة الري",
+    "إدارة التسميد",
+    "تسجيل الحصاد",
+    "بيانات الحساسات",
+    "الذكاء الاصطناعي",
+    "قاعدة البيانات"
+]
+
+page = st.sidebar.radio("القائمة الرئيسية", menu)
+
+# --------------------------------------------------
+# Dashboard
+# --------------------------------------------------
+
+if page == "لوحة التحكم":
+
+    st.header("لوحة متابعة النظام")
+
+    experiments = query("SELECT * FROM experiments")
+    plots = query("SELECT * FROM plots")
+    plants = query("SELECT * FROM plants")
+    observations = query("SELECT * FROM plot_observations")
+    harvests = query("SELECT * FROM harvests")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("التجارب", len(experiments))
+    c2.metric("القطع التجريبية", len(plots))
+    c3.metric("النباتات", len(plants))
+    c4.metric("سجلات الحصاد", len(harvests))
+
+    st.subheader("آخر قياسات التربة والجو")
+
+    if not observations.empty:
+        st.dataframe(
+            observations.tail(10),
             use_container_width=True
         )
+    else:
+        st.info("لم يتم تسجيل قياسات حتى الآن.")
 
-        st.info(
-            "الصورة محفوظة للعرض في هذه الجلسة فقط. "
-            "لم يتم إجراء تحليل آلي للصورة في هذه النسخة."
-        )
+    if not harvests.empty:
+        st.subheader("الإنتاجية المسجلة")
+        st.dataframe(harvests, use_container_width=True)
 
-    if st.button("تحليل الملاحظات"):
+# --------------------------------------------------
+# Experiments
+# --------------------------------------------------
 
-        results = analyze_notes(researcher_notes)
+elif page == "إدارة التجارب":
 
-        if len(results) == 0:
-            st.info(
-                "لم يتم العثور على كلمات مفتاحية معروفة. "
-                "حاول وصف الأعراض بصورة أكثر تحديدًا."
+    st.header("إضافة تجربة جديدة")
+
+    with st.form("experiment_form"):
+
+        name = st.text_input("اسم التجربة")
+        crop = st.text_input("المحصول", "Pepper")
+        location = st.text_input("موقع التجربة")
+        start_date = st.date_input("تاريخ البداية")
+        notes = st.text_area("ملاحظات")
+
+        submit = st.form_submit_button("حفظ التجربة")
+
+        if submit:
+            if name.strip():
+                execute("""
+                INSERT INTO experiments
+                (name, crop, location, start_date, notes)
+                VALUES (?, ?, ?, ?, ?)
+                """, (
+                    name, crop, location,
+                    str(start_date), notes
+                ))
+                st.success("تم حفظ التجربة.")
+                st.rerun()
+            else:
+                st.error("أدخل اسم التجربة.")
+
+    st.subheader("التجارب المسجلة")
+    st.dataframe(query("SELECT * FROM experiments"),
+                 use_container_width=True)
+
+# --------------------------------------------------
+# Treatments
+# --------------------------------------------------
+
+elif page == "إدارة المعاملات":
+
+    st.header("إضافة معاملة")
+
+    experiments = query("SELECT * FROM experiments")
+
+    if experiments.empty:
+        st.warning("سجل تجربة أولًا.")
+    else:
+        exp_map = dict(zip(
+            experiments["name"],
+            experiments["id"]
+        ))
+
+        with st.form("treatment_form"):
+
+            selected = st.selectbox(
+                "التجربة",
+                list(exp_map.keys())
             )
 
-        else:
-            st.subheader("نتائج الفحص الأولي")
+            name = st.text_input("اسم المعاملة")
+            description = st.text_area("وصف المعاملة")
 
-            for word, message in results:
-                st.warning(
-                    f"الكلمة: {word}\n\nالاحتمال: {message}"
+            submit = st.form_submit_button("حفظ")
+
+            if submit:
+                if name.strip():
+                    execute("""
+                    INSERT INTO treatments
+                    (experiment_id, name, description)
+                    VALUES (?, ?, ?)
+                    """, (
+                        exp_map[selected], name, description
+                    ))
+                    st.success("تم حفظ المعاملة.")
+                    st.rerun()
+                else:
+                    st.error("أدخل اسم المعاملة.")
+
+    st.dataframe(query("""
+        SELECT t.id, e.name AS experiment,
+               t.name AS treatment, t.description
+        FROM treatments t
+        JOIN experiments e ON e.id=t.experiment_id
+    """), use_container_width=True)
+
+# --------------------------------------------------
+# Plots and plants
+# --------------------------------------------------
+
+elif page == "إدارة القطع والنباتات":
+
+    st.header("تسجيل قطعة تجريبية")
+
+    experiments = query("SELECT * FROM experiments")
+
+    if experiments.empty:
+        st.warning("سجل تجربة أولًا.")
+    else:
+        exp_map = dict(zip(experiments["name"], experiments["id"]))
+
+        with st.form("plot_form"):
+
+            exp_name = st.selectbox(
+                "التجربة", list(exp_map.keys())
+            )
+
+            treatments = query("""
+                SELECT * FROM treatments
+                WHERE experiment_id=?
+            """, (exp_map[exp_name],))
+
+            if treatments.empty:
+                st.warning("أضف معاملة لهذه التجربة أولًا.")
+                submitted = False
+            else:
+                treatment_map = dict(zip(
+                    treatments["name"], treatments["id"]
+                ))
+
+                treatment_name = st.selectbox(
+                    "المعاملة", list(treatment_map.keys())
                 )
 
-            st.caption(
-                "هذه النتائج ليست تشخيصًا مؤكدًا. "
-                "يجب مراجعة صور النبات والقياسات والفحص الحقلي."
+                code = st.text_input("كود القطعة")
+                replication = st.number_input(
+                    "رقم المكرر", min_value=1, step=1
+                )
+                area = st.number_input(
+                    "المساحة بالمتر المربع",
+                    min_value=0.1, value=10.0
+                )
+
+                submitted = st.form_submit_button("حفظ القطعة")
+
+                if submitted:
+                    if code.strip():
+                        try:
+                            execute("""
+                            INSERT INTO plots
+                            (experiment_id, treatment_id,
+                             plot_code, replication, area_m2)
+                            VALUES (?, ?, ?, ?, ?)
+                            """, (
+                                exp_map[exp_name],
+                                treatment_map[treatment_name],
+                                code, replication, area
+                            ))
+                            st.success("تم حفظ القطعة.")
+                            st.rerun()
+                        except Exception as error:
+                            st.error(str(error))
+                    else:
+                        st.error("أدخل كود القطعة.")
+
+    st.divider()
+    st.subheader("إضافة نبات لقطعة")
+
+    plots = query("SELECT * FROM plots")
+
+    if not plots.empty:
+
+        plot_map = dict(zip(
+            plots["plot_code"], plots["id"]
+        ))
+
+        with st.form("plant_form"):
+
+            selected_plot = st.selectbox(
+                "القطعة", list(plot_map.keys())
             )
 
+            plant_code = st.text_input("كود النبات")
 
-# ==========================================
-# 7- محرك دعم القرار
-# ==========================================
+            submit = st.form_submit_button("إضافة النبات")
 
-st.divider()
+            if submit:
+                if plant_code.strip():
+                    try:
+                        execute("""
+                        INSERT INTO plants (plot_id, plant_code)
+                        VALUES (?, ?)
+                        """, (plot_map[selected_plot], plant_code))
 
-st.header("🤖 محرك دعم قرارات الري")
+                        st.success("تم تسجيل النبات.")
+                        st.rerun()
+                    except Exception as error:
+                        st.error(str(error))
+                else:
+                    st.error("أدخل كود النبات.")
 
-st.write(
-    "يستخدم المحرك بيانات الرطوبة والسعة الحقلية ونقطة الذبول "
-    "لتقدير نسبة استنزاف الماء المتاح."
-)
+    st.subheader("القطع")
+    st.dataframe(query("SELECT * FROM plots"),
+                 use_container_width=True)
 
-depletion_threshold = st.slider(
-    "عتبة استنزاف الماء التي تستدعي المراجعة (%)",
-    min_value=5,
-    max_value=80,
-    value=30
-)
+    st.subheader("النباتات")
+    st.dataframe(query("""
+        SELECT plants.*, plots.plot_code
+        FROM plants
+        JOIN plots ON plants.plot_id=plots.id
+    """), use_container_width=True)
 
-if wilting_point >= field_capacity:
+# --------------------------------------------------
+# Soil and weather observations
+# --------------------------------------------------
 
-    st.error(
-        "لا يمكن حساب استنزاف الماء. "
-        "راجع قيم السعة الحقلية ونقطة الذبول."
-    )
+elif page == "تسجيل قياسات التربة والجو":
 
-else:
+    st.header("إدخال قياسات التربة والجو")
 
-    depletion = calculate_depletion(
-        field_capacity,
-        wilting_point,
-        soil_moisture
-    )
+    plots = query("SELECT * FROM plots")
 
-    deficit_mm = calculate_water_deficit(
-        field_capacity,
-        soil_moisture,
-        root_depth
-    )
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric(
-        "استنزاف الماء المتاح",
-        f"{depletion * 100:.1f}%"
-    )
-
-    col2.metric(
-        "العجز النظري عن FC",
-        f"{deficit_mm:.2f} mm"
-    )
-
-    col3.metric(
-        "رطوبة التربة الحالية",
-        f"{soil_moisture:.1f}%"
-    )
-
-    st.progress(float(depletion))
-
-    if soil_moisture < wilting_point:
-
-        st.error(
-            "الرطوبة أقل من نقطة الذبول المدخلة. "
-            "يجب التحقق من القياس وحالة النبات والتربة."
-        )
-
-    elif depletion * 100 >= depletion_threshold:
-
-        st.warning(
-            "اقتراح أولي: مراجعة الحاجة إلى الري. "
-            "تحقق من حالة النبات وتوزيع الرطوبة وعمق الجذور "
-            "قبل اعتماد القرار."
-        )
-
+    if plots.empty:
+        st.warning("سجل قطعة تجريبية أولًا.")
     else:
+        plot_map = dict(zip(plots["plot_code"], plots["id"]))
 
-        st.success(
-            "لا تتجاوز نسبة الاستنزاف العتبة المحددة. "
-            "استمر في المتابعة وفق برنامج القياس."
-        )
+        with st.form("observation_form"):
 
-    st.info(
-        "العجز النظري بالملليمتر لا يساوي حجم المياه الواجب ضخه "
-        "مباشرة؛ إذ يلزم معرفة المساحة المروية وكفاءة التطبيق "
-        "وتوزيع الرطوبة والاحتياجات الفعلية للمحصول."
-    )
+            plot = st.selectbox("القطعة", list(plot_map.keys()))
+            obs_date = st.date_input("التاريخ", date.today())
 
+            moisture = st.number_input(
+                "رطوبة التربة (%)", min_value=0.0, max_value=100.0
+            )
 
-# ==========================================
-# 8- فحص الملوحة ودرجة الحموضة
-# ==========================================
+            soil_ec = st.number_input(
+                "EC التربة (dS/m)", min_value=0.0
+            )
 
-st.header("🧪 مؤشرات الملوحة ودرجة الحموضة")
+            soil_ph = st.number_input(
+                "pH التربة", min_value=0.0, max_value=14.0
+            )
 
-col1, col2 = st.columns(2)
+            water_ec = st.number_input(
+                "EC مياه الري (dS/m)", min_value=0.0
+            )
 
-with col1:
+            water_ph = st.number_input(
+                "pH مياه الري", min_value=0.0, max_value=14.0
+            )
 
-    st.metric(
-        "EC مياه الري",
-        f"{irrigation_ec:.2f} dS/m"
-    )
+            temperature = st.number_input(
+                "درجة حرارة الهواء (°C)"
+            )
 
-    if irrigation_ec > 2:
-        st.warning(
-            "قيمة EC مرتفعة نسبيًا. "
-            "راجع ملاءمتها للمحصول وظروف التربة."
-        )
-    else:
-        st.success(
-            "لا يوجد تنبيه وفق الحد الاسترشادي المستخدم هنا."
-        )
+            humidity = st.number_input(
+                "الرطوبة النسبية (%)",
+                min_value=0.0, max_value=100.0
+            )
 
-with col2:
+            notes = st.text_area("ملاحظات")
 
-    st.metric(
-        "pH مياه الري",
-        f"{irrigation_ph:.2f}"
-    )
+            submit = st.form_submit_button("حفظ القياسات")
 
-    if irrigation_ph < 5.5 or irrigation_ph > 7.5:
-        st.warning(
-            "راجع قيمة pH ومدى ملاءمتها للمحلول المغذي."
-        )
-    else:
-        st.success(
-            "قيمة pH داخل النطاق الاسترشادي المعروض."
-        )
+            if submit:
+                execute("""
+                INSERT INTO plot_observations
+                (plot_id, observation_date, soil_moisture,
+                 soil_ec, soil_ph, water_ec, water_ph,
+                 air_temperature, relative_humidity, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    plot_map[plot], str(obs_date), moisture,
+                    soil_ec, soil_ph, water_ec, water_ph,
+                    temperature, humidity, notes
+                ))
 
-st.caption(
-    "حدود التنبيه هنا استرشادية وليست حدودًا ثابتة لجميع "
-    "أصناف الفلفل أو نظم الزراعة."
-)
+                st.success("تم حفظ القياسات.")
+                st.rerun()
 
-
-# ==========================================
-# 9- حفظ القياسات
-# ==========================================
-
-st.divider()
-
-st.header("💾 حفظ بيانات التجربة")
-
-if st.button("حفظ القياسات الحالية"):
-
-    record = {
-        "تاريخ القياس": str(observation_date),
-        "اسم التجربة": experiment_name,
-        "الصنف": crop_variety,
-        "عمر النبات": plant_age,
-        "مرحلة النمو": growth_stage,
-
-        "حرارة الهواء": air_temp,
-        "الرطوبة النسبية": relative_humidity,
-        "الإشعاع الشمسي": solar_radiation,
-        "سرعة الهواء": wind_speed,
-
-        "رطوبة التربة": soil_moisture,
-        "السعة الحقلية": field_capacity,
-        "نقطة الذبول": wilting_point,
-        "عمق الجذور": root_depth,
-        "EC التربة": soil_ec,
-        "pH التربة": soil_ph,
-
-        "EC مياه الري": irrigation_ec,
-        "pH مياه الري": irrigation_ph,
-        "تصرف الري": flow_rate,
-
-        "N": nitrogen,
-        "P": phosphorus,
-        "K": potassium,
-
-        "ارتفاع النبات": plant_height,
-        "عدد الأوراق": leaf_count,
-        "LAI": lai,
-        "قطر الساق": stem_diameter,
-        "عدد الأزهار": flower_count,
-        "عدد الثمار": fruit_count,
-
-        "عدد الثمار المحصودة": harvested_fruits,
-        "وزن المحصول kg": harvested_weight,
-
-        "ملاحظات الباحث": researcher_notes
-    }
-
-    st.session_state.records.append(record)
-
-    st.success("تم حفظ القياسات في سجل الجلسة الحالية.")
-
-
-# ==========================================
-# 10- سجل البيانات والتصدير
-# ==========================================
-
-with tabs[6]:
-
-    st.header("📊 سجل القياسات")
-
-    if len(st.session_state.records) > 0:
-
-        df = pd.DataFrame(st.session_state.records)
-
-        st.dataframe(
-            df,
-            use_container_width=True
-        )
-
-        csv_data = df.to_csv(
-            index=False
-        ).encode("utf-8-sig")
-
-        st.download_button(
-            label="⬇️ تحميل سجل البيانات CSV",
-            data=csv_data,
-            file_name="pepper_experiment_data.csv",
-            mime="text/csv"
-        )
-
-        st.metric(
-            "عدد سجلات القياس",
-            len(df)
-        )
-
-        if st.button("مسح سجل الجلسة"):
-            st.session_state.records = []
-            st.rerun()
-
-    else:
-
-        st.info(
-            "لا توجد بيانات محفوظة حتى الآن. "
-            "أدخل القياسات واضغط على حفظ القياسات الحالية."
-        )
-
-
-# ==========================================
-# 11- حدود النسخة الحالية وخطة التطوير
-# ==========================================
-
-st.divider()
-
-with st.expander("🔬 ما الذي يحتاج إلى تطوير في النسخة القادمة؟"):
-
-    st.markdown("""
-    **1. التنبؤ بالنمو الخضري**
-    - تدريب نماذج ML على ارتفاع النبات وLAI وعدد الأوراق.
-    - توقع النمو خلال الأيام القادمة.
-    - مقارنة القيم المتوقعة بالقياسات الفعلية.
-
-    **2. التنبؤ بالإنتاجية**
-    - جمع بيانات المحصول الفعلية.
-    - تدريب نموذج لتوقع الإنتاجية وجودة الثمار.
-    - اختبار النموذج على بيانات لم تدخل في التدريب.
-
-    **3. التسميد الذكي**
-    - تقدير احتياجات N وP وK وفق مرحلة النمو.
-    - إدخال EC وpH للمحلول والتربة.
-    - استخدام قياسات النبات والتحليل المعملي.
-
-    **4. التوأم الرقمي الديناميكي**
-    - بناء نموذج يصف انتقال الماء في منطقة الجذور.
-    - تمثيل امتصاص النبات للماء والعناصر.
-    - تحديث حالة التوأم باستخدام القياسات الحقيقية.
-
-    **5. التحسين واتخاذ القرار**
-    - تطوير خوارزمية Optimization.
-    - تقليل استهلاك المياه والأسمدة.
-    - الحفاظ على النمو والإنتاجية ضمن القيود الزراعية.
-
-    **6. الاتصال بالأجهزة**
-    - ربط Arduino أو ESP32.
-    - استقبال قراءات الحساسات.
-    - اختبار التحكم في بيئة آمنة قبل أي تشغيل ميداني.
+    data = query("""
+        SELECT o.*, p.plot_code
+        FROM plot_observations o
+        JOIN plots p ON p.id=o.plot_id
+        ORDER BY o.observation_date DESC
     """)
 
-st.caption(
-    "Pepper Digital Twin | Research Prototype"
-)
+    st.dataframe(data, use_container_width=True)
+
+    if not data.empty:
+        st.subheader("تغير رطوبة التربة")
+        fig = px.line(
+            data.sort_values("observation_date"),
+            x="observation_date",
+            y="soil_moisture",
+            color="plot_code",
+            markers=True
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+# --------------------------------------------------
+# Plant growth
+# --------------------------------------------------
+
+elif page == "تسجيل نمو النبات":
+
+    st.header("تسجيل قياسات النمو الخضري")
+
+    plants = query("""
+        SELECT plants.id, plants.plant_code, plots.plot_code
+        FROM plants
+        JOIN plots ON plots.id=plants.plot_id
+    """)
+
+    if plants.empty:
+        st.warning("سجل النباتات أولًا.")
+    else:
+        plant_map = {
+            f"{r['plot_code']} - {r['plant_code']}": r["id"]
+            for _, r in plants.iterrows()
+        }
+
+        with st.form("growth_form"):
+
+            selected = st.selectbox(
+                "النبات", list(plant_map.keys())
+            )
+
+            obs_date = st.date_input("تاريخ القياس")
+            height = st.number_input(
+                "ارتفاع النبات (cm)", min_value=0.0
+            )
+            width = st.number_input(
+                "عرض المجموع الخضري (cm)", min_value=0.0
+            )
+            leaves = st.number_input(
+                "عدد الأوراق", min_value=0, step=1
+            )
+            leaf_area = st.number_input(
+                "مساحة الأوراق (cm²)", min_value=0.0
+            )
+            stage = st.text_input("مرحلة النمو")
+            notes = st.text_area("ملاحظات بصرية")
+
+            submit = st.form_submit_button("حفظ")
+
+            if submit:
+                execute("""
+                INSERT INTO plant_observations
+                (plant_id, observation_date,
+                 plant_height_cm, canopy_width_cm,
+                 leaf_number, leaf_area_cm2,
+                 growth_stage, visual_notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    plant_map[selected], str(obs_date),
+                    height, width, leaves, leaf_area,
+                    stage, notes
+                ))
+
+                st.success("تم حفظ قياسات النبات.")
+                st.rerun()
+
+    st.dataframe(query("""
+        SELECT po.*, p.plant_code
+        FROM plant_observations po
+        JOIN plants p ON p.id=po.plant_id
+    """), use_container_width=True)
+
+# --------------------------------------------------
+# Irrigation
+# --------------------------------------------------
+
+elif page == "إدارة الري":
+
+    st.header("تسجيل عمليات الري")
+
+    plots = query("SELECT * FROM plots")
+
+    if not plots.empty:
+
+        plot_map = dict(zip(plots["plot_code"], plots["id"]))
+
+        with st.form("irrigation_form"):
+
+            plot = st.selectbox("القطعة", list(plot_map.keys()))
+            start = st.text_input(
+                "وقت البداية", datetime.now().isoformat(timespec="minutes")
+            )
+            end = st.text_input("وقت النهاية")
+            volume = st.number_input(
+                "كمية المياه (Liter)", min_value=0.0
+            )
+            method = st.selectbox(
+                "طريقة الري", ["Drip", "Surface drip", "Subsurface drip"]
+            )
+            notes = st.text_area("ملاحظات")
+
+            submit = st.form_submit_button("حفظ عملية الري")
+
+            if submit:
+                execute("""
+                INSERT INTO irrigation_events
+                (plot_id, start_time, end_time,
+                 water_volume_liter, irrigation_method, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    plot_map[plot], start, end,
+                    volume, method, notes
+                ))
+
+                st.success("تم تسجيل عملية الري.")
+                st.rerun()
+
+    st.dataframe(query("""
+        SELECT i.*, p.plot_code
+        FROM irrigation_events i
+        JOIN plots p ON p.id=i.plot_id
+    """), use_container_width=True)
+
+# --------------------------------------------------
+# Fertigation
+# --------------------------------------------------
+
+elif page == "إدارة التسميد":
+
+    st.header("تسجيل عمليات التسميد")
+
+    plots = query("SELECT * FROM plots")
+
+    if not plots.empty:
+
+        plot_map = dict(zip(plots["plot_code"], plots["id"]))
+
+        with st.form("fertigation_form"):
+
+            plot = st.selectbox("القطعة", list(plot_map.keys()))
+            event_date = st.date_input("التاريخ")
+            fertilizer = st.text_input("اسم السماد")
+            nitrogen = st.number_input("N (g)", min_value=0.0)
+            phosphorus = st.number_input("P (g)", min_value=0.0)
+            potassium = st.number_input("K (g)", min_value=0.0)
+            total = st.number_input("إجمالي كمية السماد (g)", min_value=0.0)
+            notes = st.text_area("ملاحظات")
+
+            submit = st.form_submit_button("حفظ التسميد")
+
+            if submit:
+                execute("""
+                INSERT INTO fertigation_events
+                (plot_id, event_date, fertilizer_name,
+                 nitrogen_g, phosphorus_g, potassium_g,
+                 total_amount_g, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    plot_map[plot], str(event_date),
+                    fertilizer, nitrogen, phosphorus,
+                    potassium, total, notes
+                ))
+
+                st.success("تم حفظ عملية التسميد.")
+                st.rerun()
+
+    st.dataframe(query("""
+        SELECT f.*, p.plot_code
+        FROM fertigation_events f
+        JOIN plots p ON p.id=f.plot_id
+    """), use_container_width=True)
+
+# --------------------------------------------------
+# Harvest
+# --------------------------------------------------
+
+elif page == "تسجيل الحصاد":
+
+    st.header("تسجيل الإنتاجية")
+
+    plots = query("SELECT * FROM plots")
+
+    if not plots.empty:
+
+        plot_map = dict(zip(plots["plot_code"], plots["id"]))
+
+        with st.form("harvest_form"):
+
+            plot = st.selectbox("القطعة", list(plot_map.keys()))
+            harvest_date = st.date_input("تاريخ الحصاد")
+            fruits = st.number_input(
+                "عدد الثمار", min_value=0, step=1
+            )
+            yield_kg = st.number_input(
+                "وزن المحصول (kg)", min_value=0.0
+            )
+            average = st.number_input(
+                "متوسط وزن الثمرة (g)", min_value=0.0
+            )
+            notes = st.text_area("ملاحظات")
+
+            submit = st.form_submit_button("حفظ الحصاد")
+
+            if submit:
+                execute("""
+                INSERT INTO harvests
+                (plot_id, harvest_date, fruit_number,
+                 yield_kg, average_fruit_weight_g, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    plot_map[plot], str(harvest_date),
+                    fruits, yield_kg, average, notes
+                ))
+
+                st.success("تم تسجيل الحصاد.")
+                st.rerun()
+
+    st.dataframe(query("""
+        SELECT h.*, p.plot_code
+        FROM harvests h
+        JOIN plots p ON p.id=h.plot_id
+    """), use_container_width=True)
+
+# --------------------------------------------------
+# Sensors
+# --------------------------------------------------
+
+elif page == "بيانات الحساسات":
+
+    st.header("إدارة الحساسات")
+
+    plots = query("SELECT * FROM plots")
+
+    if not plots.empty:
+
+        plot_map = dict(zip(plots["plot_code"], plots["id"]))
+
+        with st.form("sensor_form"):
+
+            device = st.text_input("كود الجهاز")
+            sensor_type = st.selectbox(
+                "نوع الحساس",
+                [
+                    "Soil Moisture",
+                    "Soil EC",
+                    "Soil pH",
+                    "Water EC",
+                    "Water pH",
+                    "Temperature",
+                    "Humidity",
+                    "Flow Meter",
+                    "Load Cell"
+                ]
+            )
+            plot = st.selectbox("القطعة", list(plot_map.keys()))
+            unit = st.text_input("وحدة القياس")
+
+            submit = st.form_submit_button("تسجيل الحساس")
+
+            if submit:
+                if device.strip():
+                    execute("""
+                    INSERT INTO sensors
+                    (device_code, sensor_type, plot_id, unit)
+                    VALUES (?, ?, ?, ?)
+                    """, (
+                        device, sensor_type, plot_map[plot], unit
+                    ))
+                    st.success("تم تسجيل الحساس.")
+                    st.rerun()
+
+    st.subheader("الحساسات المسجلة")
+    st.dataframe(query("SELECT * FROM sensors"),
+                 use_container_width=True)
+
+    st.info(
+        "استقبال القراءات الفعلية من Arduino وESP8266 "
+        "سيتم تفعيله بعد بناء واجهة الاتصال."
+    )
+
+# --------------------------------------------------
+# AI decisions
+# --------------------------------------------------
+
+elif page == "الذكاء الاصطناعي":
+
+    st.header("محرك الذكاء الاصطناعي")
+
+    st.warning(
+        "لا يوجد نموذج مدرب في هذه النسخة. "
+        "لن نعرض تنبؤات أو توصيات زراعية باعتبارها نتائج علمية."
+    )
+
+    st.subheader("تسجيل قرار بحثي مقترح")
+
+    plots = query("SELECT * FROM plots")
+
+    if not plots.empty:
+
+        plot_map = dict(zip(plots["plot_code"], plots["id"]))
+
+        with st.form("decision_form"):
+
+            plot = st.selectbox("القطعة", list(plot_map.keys()))
+
+            decision_type = st.selectbox(
+                "نوع القرار",
+                ["Irrigation", "Fertigation", "Combined"]
+            )
+
+            water = st.number_input(
+                "المياه المقترحة (Liter)", min_value=0.0
+            )
+            n = st.number_input("N (g)", min_value=0.0)
+            p = st.number_input("P (g)", min_value=0.0)
+            k = st.number_input("K (g)", min_value=0.0)
+
+            explanation = st.text_area("سبب القرار")
+            model = st.text_input("اسم النموذج", "Manual research entry")
+
+            submit = st.form_submit_button("تسجيل القرار")
+
+            if submit:
+                execute("""
+                INSERT INTO ai_decisions
+                (plot_id, decision_time, decision_type,
+                 recommended_water_liter,
+                 recommended_nitrogen_g,
+                 recommended_phosphorus_g,
+                 recommended_potassium_g,
+                 model_name, explanation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    plot_map[plot],
+                    datetime.now().isoformat(timespec="seconds"),
+                    decision_type, water, n, p, k,
+                    model, explanation
+                ))
+
+                st.success("تم تسجيل القرار كاقتراح غير منفذ.")
+                st.rerun()
+
+    st.subheader("سجل القرارات")
+
+    st.dataframe(query("""
+        SELECT d.*, p.plot_code
+        FROM ai_decisions d
+        LEFT JOIN plots p ON p.id=d.plot_id
+        ORDER BY d.decision_time DESC
+    """), use_container_width=True)
+
+# --------------------------------------------------
+# Database
+# --------------------------------------------------
+
+elif page == "قاعدة البيانات":
+
+    st.header("عرض جداول قاعدة البيانات")
+
+    tables = [
+        "experiments",
+        "treatments",
+        "plots",
+        "plants",
+        "plot_observations",
+        "plant_observations",
+        "irrigation_events",
+        "fertigation_events",
+        "harvests",
+        "sensors",
+        "sensor_readings",
+        "ai_decisions",
+        "control_executions"
+    ]
+
+    selected_table = st.selectbox("اختر الجدول", tables)
+
+    df = query(f"SELECT * FROM {selected_table}")
+
+    st.dataframe(df, use_container_width=True)
+
+    csv = df.to_csv(index=False).encode("utf-8-sig")
+
+    st.download_button(
+        "تحميل البيانات CSV",
+        csv,
+        file_name=f"{selected_table}.csv",
+        mime="text/csv"
+    )
