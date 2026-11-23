@@ -1,5 +1,6 @@
 
 import streamlit as st
+import pandas as pd
 
 st.set_page_config(
     page_title="Pepper Digital Twin",
@@ -8,75 +9,208 @@ st.set_page_config(
 )
 
 st.title("🌱 Pepper Digital Twin")
-st.subheader("Soil Water Balance Model")
+st.subheader("Hybrid Irrigation and Fertigation Management")
 
-st.header("1. Initial Conditions")
+st.info("Prototype simulation - using assumed educational parameters.")
 
-soil_moisture = st.slider(
-    "Initial Soil Moisture (%)",
-    10, 50, 28
+# 1. INPUT DATA
+st.header("1. Greenhouse Measurements")
+
+c1, c2, c3 = st.columns(3)
+
+with c1:
+    moisture = st.number_input(
+        "Soil Moisture (%)", 10.0, 50.0, 24.0
+    )
+
+with c2:
+    ec = st.number_input(
+        "Root Zone EC (dS/m)", 0.1, 5.0, 1.5
+    )
+
+with c3:
+    ph = st.number_input(
+        "Solution pH", 3.0, 10.0, 6.0
+    )
+
+temperature = st.slider(
+    "Air Temperature (°C)", 10, 45, 28
 )
 
-irrigation_time = st.slider(
-    "Irrigation Duration (minutes)",
-    0, 60, 10
-)
+st.divider()
 
-simulation_time = st.slider(
-    "Simulation Period (minutes)",
-    0, 180, 60
-)
+# 2. MODEL PARAMETERS
+st.header("2. Crop and Model Parameters")
 
-st.header("2. Model Parameters")
+target_moisture = st.slider(
+    "Target Soil Moisture (%)", 20, 40, 30
+)
 
 soil_volume = 20.0
 water_flow = 6.0
-crop_water_uptake = 0.02
 
-initial_water = (
-    soil_volume * soil_moisture / 100
+# Illustrative nutrient requirements (mg)
+required_n = 100.0
+required_p = 20.0
+required_k = 120.0
+
+# Illustrative water uptake
+water_uptake = 0.02
+
+# 3. SCENARIO GENERATION
+st.header("3. Scenario Simulation")
+
+irrigation_options = [5, 10, 15, 20, 25, 30]
+fertilizer_options = [0.8, 1.0, 1.2]
+
+scenarios = []
+
+initial_water = soil_volume * moisture / 100
+
+for irrigation_time in irrigation_options:
+
+    water_added = water_flow * irrigation_time / 60
+
+    predicted_moisture = (
+        initial_water + water_added
+    ) / soil_volume * 100
+
+    for fertilizer_rate in fertilizer_options:
+
+        n_added = required_n * fertilizer_rate
+        p_added = required_p * fertilizer_rate
+        k_added = required_k * fertilizer_rate
+
+        nutrient_ok = (
+            n_added >= required_n
+            and p_added >= required_p
+            and k_added >= required_k
+        )
+
+        moisture_ok = (
+            predicted_moisture >= target_moisture
+            and predicted_moisture <= 35
+        )
+
+        ec_ok = ec <= 2.5
+        ph_ok = 5.5 <= ph <= 6.5
+
+        suitable = (
+            moisture_ok
+            and nutrient_ok
+            and ec_ok
+            and ph_ok
+        )
+
+        scenarios.append({
+            "Irrigation (min)": irrigation_time,
+            "Water (L)": round(water_added, 2),
+            "N (mg)": round(n_added, 1),
+            "P (mg)": round(p_added, 1),
+            "K (mg)": round(k_added, 1),
+            "Predicted Moisture (%)": round(
+                predicted_moisture, 2
+            ),
+            "Suitable": suitable
+        })
+
+df = pd.DataFrame(scenarios)
+
+st.dataframe(
+    df,
+    use_container_width=True,
+    hide_index=True
 )
 
-water_added = (
-    water_flow * irrigation_time / 60
-)
+# 4. OPTIMIZATION
+st.divider()
+st.header("4. Optimal Scenario Selection")
 
-water_consumed = (
-    crop_water_uptake * simulation_time
-)
+suitable = df[df["Suitable"] == True]
 
-final_water = (
-    initial_water + water_added - water_consumed
-)
+if not suitable.empty:
 
-final_moisture = (
-    final_water / soil_volume * 100
-)
+    best = suitable.sort_values(
+        by=["Water (L)", "N (mg)", "K (mg)"]
+    ).iloc[0]
 
-st.header("3. Simulation Results")
+    st.success("Suitable scenario identified!")
 
-col1, col2, col3 = st.columns(3)
+    a, b, c = st.columns(3)
 
-with col1:
-    st.metric("Water Added", f"{water_added:.2f} L")
-
-with col2:
-    st.metric("Water Uptake", f"{water_consumed:.2f} L")
-
-with col3:
-    st.metric(
-        "Final Soil Moisture",
-        f"{final_moisture:.2f}%"
+    a.metric(
+        "Irrigation Time",
+        f"{int(best['Irrigation (min)'])} min"
     )
 
-st.write("### Water Balance")
+    b.metric(
+        "Water Requirement",
+        f"{best['Water (L)']} L"
+    )
 
-st.write(f"Initial water: {initial_water:.2f} L")
-st.write(f"Added water: {water_added:.2f} L")
-st.write(f"Consumed water: {water_consumed:.2f} L")
-st.write(f"Final water: {final_water:.2f} L")
+    c.metric(
+        "Predicted Moisture",
+        f"{best['Predicted Moisture (%)']}%"
+    )
+
+    st.subheader("Recommended Fertilizer Doses")
+
+    x, y, z = st.columns(3)
+
+    x.metric("Nitrogen N", f"{best['N (mg)']} mg")
+    y.metric("Phosphorus P", f"{best['P (mg)']} mg")
+    z.metric("Potassium K", f"{best['K (mg)']} mg")
+
+    st.warning(
+        "This is a simulated recommendation, not a real fertilizer prescription."
+    )
+
+else:
+
+    st.error(
+        "No suitable scenario found. "
+        "Review the input conditions or expand the tested scenarios."
+    )
+
+# 5. EC AND PH MONITORING
+st.divider()
+st.header("5. Solution Quality Monitoring")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    if ec <= 2.5:
+        st.success(f"EC reading: {ec} dS/m")
+    else:
+        st.error("EC exceeds the illustrative model limit.")
+
+with col2:
+    if 5.5 <= ph <= 6.5:
+        st.success(f"pH reading: {ph}")
+    else:
+        st.warning("pH is outside the illustrative target range.")
+
+# 6. WATER UPTAKE
+st.divider()
+st.header("6. Crop Water Uptake")
+
+simulation_hours = st.slider(
+    "Prediction Horizon (hours)",
+    1, 24, 6
+)
+
+predicted_water_uptake = (
+    water_uptake * simulation_hours * 60
+)
+
+st.metric(
+    "Estimated Crop Water Uptake",
+    f"{predicted_water_uptake:.2f} L"
+)
 
 st.caption(
-    "Educational model with assumed water uptake. "
-    "No drainage or water redistribution is included."
+    "Research prototype: nutrient requirements, "
+    "water uptake, EC limits and pH limits are assumed values. "
+    "They must be replaced with calibrated crop-specific models "
+    "and experimental measurements before real operation."
 )
