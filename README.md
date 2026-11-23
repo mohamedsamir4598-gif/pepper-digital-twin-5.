@@ -1,68 +1,33 @@
 
-import streamlit as st
+# Pepper Digital Twin
 
-st.set_page_config(
-    page_title="Pepper Digital Twin",
-    page_icon="🌱",
-    layout="wide"
-)
+An AI-based research prototype for smart irrigation and fertigation management in pepper cultivation.
 
-st.title("🌱 Pepper Digital Twin")
-st.subheader("Smart Irrigation and Fertigation System")
+## Current features
+- Experiment management
+- Treatment and plot management
+- Plant growth observations
+- Soil and weather observations
+- Irrigation and fertigation records
+- Harvest records
+- Sensor registry
+- AI decision logging
+- Data export
 
-st.info("Welcome to your Smart Agriculture Dashboard")
+## Installation
 
-st.header("Current Soil Conditions")
+```bash
+pip install -r requirements.txt
+```
 
-col1, col2, col3 = st.columns(3)
+## Run
 
-with col1:
-    st.metric("Soil Moisture", "24 %")
+```bash
+streamlit run app.py
+```
 
-with col2:
-    st.metric("Soil Temperature", "25 °C")
+## Important
 
-with col3:
-    st.metric("Valve Status", "CLOSED")
-
-st.divider()
-
-st.header("💧 Irrigation Simulation")
-
-soil_moisture = st.slider(
-    "Current Soil Moisture (%)",
-    min_value=10,
-    max_value=50,
-    value=24
-)
-
-irrigation_time = st.slider(
-    "Irrigation Duration (minutes)",
-    min_value=0,
-    max_value=60,
-    value=15
-)
-
-if st.button("Run Digital Twin Simulation"):
-
-    soil_volume = 20.0
-    water_flow = 6.0
-
-    water_added = water_flow * irrigation_time / 60
-
-    predicted_moisture = (
-        soil_moisture + water_added / soil_volume * 100
-    )
-
-    st.success("Simulation Completed!")
-
-    st.metric(
-        "Predicted Soil Moisture",
-        f"{predicted_moisture:.2f} %"
-    )
-
-    st.metric(
-        "Water Added",
-        f"{water_added:.2f} Liter"
-    )
-# pepper-digital-twin-5.
+This is a research prototype.
+Synthetic data must not be treated as real experimental data.
+AI predictions and control functions are not yet validated.
