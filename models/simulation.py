@@ -246,6 +246,8 @@ def simulate_crop(params, weather=None):
         fruit_dry_matter_fraction=float(params.get("fruit_dry_matter_fraction", 0.08)),
         harvest_recovery_fraction=float(params.get("harvest_recovery_fraction", 0.80)),
     )
+    replaced_columns = [col for col in crop_growth.columns if col != "Day" and col in daily.columns]
+    daily = daily.drop(columns=replaced_columns)
     daily = daily.merge(crop_growth, on="Day", how="left", validate="one_to_one")
     estimated_yield = float(
         daily["Illustrative_Fresh_Fruit_Yield_t_ha"].iloc[-1]
