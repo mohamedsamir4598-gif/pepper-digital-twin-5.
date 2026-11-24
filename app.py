@@ -28,6 +28,11 @@ from models.data_store import (
     get_observations,
 )
 
+from models.decision_support import (
+    build_irrigation_schedule,
+    fertilizer_mass_for_target,
+)
+
 st.set_page_config(
     page_title="Pepper Greenhouse Digital Twin",
     page_icon="🌱",
@@ -390,6 +395,118 @@ c5.metric(
     "Final biomass",
     f"{df.Biomass_t_ha.iloc[-1]:.2f} t/ha"
 )
+
+st.header("Decision support and virtual operation")
+st.caption(
+    "The following is a transparent rule-based candidate schedule. "
+    "It is not an autonomous controller and must be calibrated before field use."
+)
+with st.expander("Configure irrigation network assumptions", expanded=True):
+    d1, d2, d3 = st.columns(3)
+    with d1:
+        decision_trigger = st.slider(
+            "Irrigation trigger (% available water)", 20, 80, 45
+        ) / 100
+        decision_target = st.slider(
+            "Refill target (% available water)", 60, 100, 90
+        ) / 100
+    with d2:
+        decision_emitters = st.number_input(
+            "Number of emitters", min_value=1, max_value=100000,
+            value=300, step=10
+        )
+        decision_flow = st.number_input(
+            "Emitter flow (L/h)", min_value=0.1, max_value=100.0,
+            value=2.0, step=0.1
+        )
+    with d3:
+        decision_eff = st.slider(
+            "Application efficiency (%)", 50, 100, 90
+        ) / 100
+        decision_max_runtime = st.number_input(
+            "Maximum runtime per event (min)", min_value=1.0,
+            max_value=1440.0, value=180.0, step=5.0
+        )
+    st.caption(
+        "Emitter count, emitter discharge and efficiency are editable "
+        "illustrative defaults, not measured greenhouse specifications."
+    )
+
+try:
+    irrigation_plan = build_irrigation_schedule(
+        df,
+        field_capacity_pct=fc * 100,
+        wilting_point_pct=wp * 100,
+        root_depth_m=root_depth,
+        area_m2=area_m2,
+        trigger_fraction=decision_trigger,
+        target_fraction=decision_target,
+        application_efficiency=decision_eff,
+        emitter_count=int(decision_emitters),
+        emitter_flow_lph=decision_flow,
+        max_runtime_min=decision_max_runtime,
+    )
+    event_plan = irrigation_plan[irrigation_plan["Irrigation_Event"]]
+    dcol1, dcol2, dcol3 = st.columns(3)
+    dcol1.metric("Candidate irrigation events", len(event_plan))
+    dcol2.metric(
+        "Candidate gross water",
+        f"{irrigation_plan['Gross_Water_L'].sum():.1f} L"
+    )
+    dcol3.metric(
+        "Maximum event runtime",
+        f"{event_plan['Valve_Runtime_min'].max():.1f} min"
+        if not event_plan.empty else "No event"
+    )
+    st.dataframe(irrigation_plan, use_container_width=True)
+    st.download_button(
+        "Download candidate irrigation schedule",
+        irrigation_plan.to_csv(index=False).encode("utf-8-sig"),
+        file_name="pepper_candidate_irrigation_schedule.csv",
+        mime="text/csv",
+    )
+except Exception as exc:
+    st.error(f"Could not calculate irrigation schedule: {exc}")
+
+with st.expander("Fertilizer solution mass calculator (label-based)"):
+    st.warning(
+        "This calculates product mass for a user-specified nutrient "
+        "concentration. It does not infer crop nutrient demand or check "
+        "chemical compatibility, water alkalinity, solubility or salinity."
+    )
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        nutrient_target = st.number_input(
+            "Target nutrient concentration (mg/L)", min_value=0.0,
+            value=100.0, step=10.0
+        )
+    with f2:
+        nutrient_solution_volume = st.number_input(
+            "Final solution volume (L)", min_value=0.0,
+            value=100.0, step=10.0
+        )
+    with f3:
+        nutrient_grade_pct = st.number_input(
+            "Labelled elemental nutrient (%)", min_value=0.1,
+            max_value=100.0, value=15.0, step=0.5
+        )
+    try:
+        dose = fertilizer_mass_for_target(
+            nutrient_target,
+            nutrient_solution_volume,
+            nutrient_grade_pct / 100.0,
+        )
+        st.metric(
+            "Calculated fertilizer product mass",
+            f"{dose['fertilizer_product_g']:.2f} g"
+        )
+        st.caption(
+            f"Elemental nutrient required: {dose['target_nutrient_g']:.2f} g. "
+            "Enter elemental nutrient percentage from the label; do not "
+            "enter P2O5 or K2O as if they were elemental P or K."
+        )
+    except Exception as exc:
+        st.error(str(exc))
 
 tabs = st.tabs([
     "Overview",
