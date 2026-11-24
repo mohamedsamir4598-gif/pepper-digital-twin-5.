@@ -636,6 +636,30 @@ with tabs[1]:
 
     st.plotly_chart(fig, width="stretch")
 
+    st.subheader("Root-zone storage and water-balance closure")
+    storage_fig = px.line(
+        df,
+        x="Day",
+        y=["Storage_Start_mm", "Storage_End_mm"],
+        title="Root-zone water storage",
+    )
+    st.plotly_chart(storage_fig, width="stretch")
+    residual_fig = px.line(
+        df,
+        x="Day",
+        y="Water_Balance_Residual_mm",
+        title="Daily water-balance residual (should be near zero)",
+    )
+    st.plotly_chart(residual_fig, width="stretch")
+    st.metric(
+        "Maximum absolute balance residual",
+        f"{summary['Maximum_Absolute_Water_Balance_Residual_mm']:.8f} mm",
+    )
+    st.caption(
+        "The residual is a numerical closure diagnostic for the simplified "
+        "root-zone bucket, not evidence that the model matches field conditions."
+    )
+
     st.json(summary)
 
 with tabs[2]:
