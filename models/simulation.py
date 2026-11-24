@@ -119,8 +119,6 @@ def simulate_crop(params, weather=None):
     if not 0 < trigger_fraction < target_fraction <= 1:
         raise ValueError("Require 0 < trigger_fraction < target_fraction <= 1.")
 
-    lai = float(params["initial_lai"])
-    biomass = float(params["initial_biomass_t_ha"])
     irrigation_target = float(params["irrigation_pct"]) / 100.0
     fert_pct = float(params["fertilizer_pct"])
     rows = []
@@ -181,23 +179,6 @@ def simulate_crop(params, weather=None):
         )
 
         nutrient_factor = float(np.clip(0.65 + 0.35 * fert_pct / 100.0, 0.45, 1.0))
-        temp_factor = float(np.clip(
-            1 - (abs(temp - 24.0) / 20.0) ** 1.5, 0.25, 1.0
-        ))
-        water_factor = float(np.clip(ks, 0, 1))
-        intercepted_par = 0.48 * solar * (1 - np.exp(-0.65 * max(lai, 0.01)))
-        rue = float(params.get("rue_g_mj", 2.2))
-        delta_biomass = (
-            rue * intercepted_par * temp_factor
-            * water_factor * nutrient_factor * 0.01
-        )
-        biomass += max(0.0, delta_biomass)
-        lai_growth = (
-            0.035 * temp_factor * water_factor
-            * nutrient_factor * (1 - lai / 4.0)
-        )
-        lai = float(np.clip(lai + lai_growth, 0.05, 5.0))
-
         rows.append({
             "Day": day,
             "Temperature_C": temp,
