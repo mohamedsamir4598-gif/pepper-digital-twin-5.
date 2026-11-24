@@ -5,6 +5,7 @@ simulation outputs should not be inserted here as measured observations.
 """
 from pathlib import Path
 import os
+import math
 import sqlite3
 from datetime import datetime, timezone
 
@@ -58,22 +59,44 @@ def initialize_store():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_observations_time ON observations(timestamp)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_observations_plot ON observations(plot_id)")
 
+def _is_missing(value):
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    try:
+        return math.isnan(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
 def _clean_record(record, source_override=None):
     row = {key: record.get(key) for key in FIELDS}
-    row["timestamp"] = str(row.get("timestamp") or datetime.now(timezone.utc).isoformat())
-    row["plot_id"] = str(row.get("plot_id") or "Plot-1")
-    row["source"] = source_override or str(row.get("source") or "manual")
+    if _is_missing(row.get("timestamp")):
+        row["timestamp"] = datetime.now(timezone.utc).isoformat()
+    else:
+        row["timestamp"] = str(row["timestamp"])
+    if _is_missing(row.get("plot_id")):
+        row["plot_id"] = "Plot-1"
+    else:
+        row["plot_id"] = str(row["plot_id"])
+    row["source"] = source_override or (
+        "manual" if _is_missing(row.get("source")) else str(row["source"])
+    )
     if row["source"] not in {"manual", "csv", "iot"}:
         raise ValueError("source must be manual, csv, or iot")
     for key in NUMERIC_FIELDS:
         value = row.get(key)
-        if value in ("", None):
+        if _is_missing(value):
             row[key] = None
         else:
             try:
-                row[key] = float(value)
+                number = float(value)
+                if not math.isfinite(number):
+                    raise ValueError
+                row[key] = number
             except (TypeError, ValueError):
-                raise ValueError(f"{key} must be numeric") from None
+                raise ValueError(f"{key} must be a finite numeric value") from None
     return row
 
 def add_observation(record, source_override=None):
