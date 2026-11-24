@@ -90,11 +90,28 @@ with st.sidebar:
     st.divider()
     st.subheader("Irrigation and fertilization")
 
+    irrigation_strategy = st.selectbox(
+        "Irrigation strategy",
+        options=["fixed_etc", "soil_moisture_trigger"],
+        format_func=lambda x: (
+            "Fixed fraction of ETc" if x == "fixed_etc"
+            else "Soil-moisture trigger and refill"
+        ),
+    )
+
     irrigation_pct = st.select_slider(
-        "Irrigation (% ETc)",
+        "Irrigation (% ETc) — used in fixed strategy",
         options=[60, 75, 90, 100, 105],
         value=90,
     )
+
+    trigger_fraction = st.slider(
+        "Trigger depletion (% TAW)", 10, 80, 40
+    ) / 100.0
+
+    target_fraction = st.slider(
+        "Refill target (% TAW)", 60, 100, 90
+    ) / 100.0
 
     fertilizer_pct = st.select_slider(
         "Fertilizer (% reference)",
@@ -212,6 +229,9 @@ params = {
     "root_depth_m": root_depth,
     "initial_theta": simulation_initial_theta,
     "irrigation_pct": irrigation_pct,
+    "irrigation_strategy": irrigation_strategy,
+    "trigger_fraction": trigger_fraction,
+    "target_fraction": target_fraction,
     "fertilizer_pct": fertilizer_pct,
     "irrigation_efficiency": irrigation_eff,
     "initial_lai": initial_lai,
