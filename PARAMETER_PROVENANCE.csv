@@ -13,7 +13,7 @@ Root-zone depth,0.35,m,Assumed,Prototype setting; measure effective rooting dept
 Volumetric field capacity,0.32,m3/m3,Assumed,Do not confuse with gravimetric FC values in papers
 Volumetric wilting point,0.16,m3/m3,Assumed,Must be measured for target soil
 Initial LAI,0.15,m2/m2,Assumed,Seedling/transplant establishment starting point
-RUE,1.6,g dry matter/MJ intercepted PAR,Literature reference from open-field pepper,Vieira et al. (2009), Scientia Horticulturae 121:404-409, DOI 10.1016/j.scienta.2009.03.007; not greenhouse-calibrated
+RUE,1.6,"g dry matter/MJ intercepted PAR",Literature reference from open-field pepper,"Vieira et al. (2009), Scientia Horticulturae 121:404-409, DOI 10.1016/j.scienta.2009.03.007; not greenhouse-calibrated"
 Harvest index,0.35,-,Assumed placeholder,Yield conversion remains illustrative until fruit data calibration
 Reference nitrogen rate,300.0,kg N/ha,Published reference regime,"Xiang et al. (2018), local conventional regime in their study; not an Egypt fertilizer recommendation"
 Base temperature,10,degC,Published reference threshold,Assessing different models to predict the growth and development of pepper plants under water deficits (2024); cultivar and stage-specific thresholds need local calibration
