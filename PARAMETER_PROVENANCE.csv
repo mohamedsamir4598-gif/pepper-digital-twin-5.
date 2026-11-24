@@ -1,0 +1,18 @@
+Variable,Value,Unit,Status,Source_or_note
+Greenhouse mean air temperature,24.6,degC,Published mean,"Kotb et al. (2018), Egypt; ±2.1 C reported"
+Greenhouse mean relative humidity,50.2,%,Published mean,"Kotb et al. (2018), Egypt; ±2% reported"
+Kc vegetative,0.65,-,Published,"Kotb et al. (2018), Table 2"
+Kc flowering and fruit formation,1.0,-,Published,"Kotb et al. (2018), Table 2"
+Kc end season,0.95,-,Published,"Kotb et al. (2018), Table 2"
+ETo vegetative stage,5.6,mm/day,Published mean,"Kotb et al. (2018), Table 2"
+ETo flowering/fruit stage,3.5,mm/day,Published mean,"Kotb et al. (2018), Table 2"
+ETo end season,5.6,mm/day,Published mean,"Kotb et al. (2018), Table 2"
+Solar radiation,15.5,MJ/m2/day,Assumed central value,Daily sinusoidal variation ±2 MJ/m2/day; not reported as a daily series in source
+Rainfall in greenhouse,0.0,mm/day,Assumed,Protected-house scenario; replace if rain enters structure
+Root-zone depth,0.35,m,Assumed,Prototype setting; measure effective rooting depth
+Volumetric field capacity,0.32,m3/m3,Assumed,Do not confuse with gravimetric FC values in papers
+Volumetric wilting point,0.16,m3/m3,Assumed,Must be measured for target soil
+Initial LAI,0.15,m2/m2,Assumed,Seedling/transplant establishment starting point
+RUE,2.2,g dry matter/MJ intercepted PAR,Assumed placeholder,Requires local calibration; not claimed as measured in cited papers
+Harvest index,0.35,-,Assumed placeholder,Yield conversion remains illustrative until fruit data calibration
+Reference nitrogen rate,300.0,kg N/ha,Published reference regime,"Xiang et al. (2018), local conventional regime in their study; not an Egypt fertilizer recommendation"
