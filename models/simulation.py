@@ -2,6 +2,8 @@
 import numpy as np
 import pandas as pd
 
+from models.crop_growth import simulate_pepper_growth
+
 REQUIRED_WEATHER_COLUMNS = [
     "Day", "ETo_mm", "Temperature_C",
     "RH_pct", "Solar_MJ_m2", "Rain_mm"
@@ -223,8 +225,31 @@ def simulate_crop(params, weather=None):
         })
 
     daily = pd.DataFrame(rows)
-    harvest_index = 0.35
-    estimated_yield = max(0.0, biomass * harvest_index)
+
+    # Replace the former illustrative LAI/biomass trend with the dedicated
+    # thermal-time and intercepted-PAR crop growth submodel.
+    crop_growth = simulate_pepper_growth(
+        w,
+        daily["Ks"].to_numpy(),
+        daily["Nutrient_Factor"].to_numpy(),
+        initial_lai=float(params["initial_lai"]),
+        initial_total_biomass_t_ha=float(params["initial_biomass_t_ha"]),
+        rue_g_mj=float(params.get("rue_g_mj", 1.6)),
+        extinction_coefficient=float(params.get("extinction_coefficient", 0.70)),
+        specific_leaf_area_m2_kg=float(params.get("specific_leaf_area_m2_kg", 25.0)),
+        base_temperature_c=float(params.get("base_temperature_c", 10.0)),
+        optimum_temperature_c=float(params.get("optimum_temperature_c", 25.0)),
+        upper_temperature_c=float(params.get("upper_temperature_c", 35.0)),
+        flowering_gdd=float(params.get("flowering_gdd", 300.0)),
+        fruit_set_gdd=float(params.get("fruit_set_gdd", 500.0)),
+        harvest_gdd=float(params.get("harvest_gdd", 1000.0)),
+        fruit_dry_matter_fraction=float(params.get("fruit_dry_matter_fraction", 0.08)),
+        harvest_recovery_fraction=float(params.get("harvest_recovery_fraction", 0.80)),
+    )
+    daily = daily.merge(crop_growth, on="Day", how="left", validate="one_to_one")
+    estimated_yield = float(
+        daily["Illustrative_Fresh_Fruit_Yield_t_ha"].iloc[-1]
+    )
     total_irrigation = float(daily["Irrigation_mm"].sum())
     total_gross = float(daily["Gross_Irrigation_mm"].sum())
     water_productivity = (
@@ -247,13 +272,18 @@ def simulate_crop(params, weather=None):
         "Final_Soil_Moisture_pct": float(daily["Soil_Moisture_pct"].iloc[-1]),
         "Final_LAI": float(daily["LAI"].iloc[-1]),
         "Final_Biomass_t_ha": float(daily["Biomass_t_ha"].iloc[-1]),
-        "Illustrative_Harvest_Index": harvest_index,
+        "Final_Leaf_Biomass_t_ha": float(daily["Leaf_Biomass_t_ha"].iloc[-1]),
+        "Final_Stem_Biomass_t_ha": float(daily["Stem_Biomass_t_ha"].iloc[-1]),
+        "Final_Fruit_Dry_Biomass_t_ha": float(daily["Fruit_Dry_Biomass_t_ha"].iloc[-1]),
+        "Final_Cumulative_GDD_C_day": float(daily["Cumulative_GDD_C_day"].iloc[-1]),
+        "Final_Growth_Stage": str(daily["Growth_Stage"].iloc[-1]),
         "Illustrative_Fruit_Yield_t_ha": estimated_yield,
         "Illustrative_Water_Productivity_kg_m3": water_productivity,
         "Weather_Provenance": "Literature-based scenario with assumed daily variation",
         "Model_Assumptions": (
             "Single root-zone bucket; no runoff/capillary rise; "
-            "instantaneous mixing; parameters require calibration"
+            "instantaneous mixing; crop growth driven by thermal time "
+            "and intercepted PAR; cultivar-specific parameters require calibration"
         ),
     }
     return {"daily": daily, "summary": summary}
