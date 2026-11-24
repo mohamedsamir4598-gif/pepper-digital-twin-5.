@@ -201,8 +201,6 @@ def simulate_crop(params, weather=None):
             "Ks": ks,
             "Nutrient_Factor": nutrient_factor,
             "Water_Balance_Residual_mm": balance_residual,
-            "LAI": lai,
-            "Biomass_t_ha": biomass,
         })
 
     daily = pd.DataFrame(rows)
