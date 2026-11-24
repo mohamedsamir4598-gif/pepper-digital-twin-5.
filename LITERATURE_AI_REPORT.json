@@ -1,0 +1,31 @@
+{
+  "n_treatment_means": 16,
+  "features": [
+    "Irrigation_pct_ET0",
+    "Nitrogen_kg_ha"
+  ],
+  "targets": [
+    "Marketable_yield_t_ha",
+    "WUE_kg_m3",
+    "PFPN_kg_kg"
+  ],
+  "validation": "Leave-one-treatment-mean-out cross-validation",
+  "metrics": {
+    "Marketable_yield_t_ha": {
+      "LOOCV_MAE": 4.37381,
+      "LOOCV_RMSE": 5.3136,
+      "LOOCV_R2": 0.22424
+    },
+    "WUE_kg_m3": {
+      "LOOCV_MAE": 1.79073,
+      "LOOCV_RMSE": 2.08785,
+      "LOOCV_R2": 0.19401
+    },
+    "PFPN_kg_kg": {
+      "LOOCV_MAE": 31.07934,
+      "LOOCV_RMSE": 41.83493,
+      "LOOCV_R2": 0.74701
+    }
+  },
+  "warning": "Only 16 published treatment means; exploratory fit, not independent validation or a robust recommendation model."
+}
