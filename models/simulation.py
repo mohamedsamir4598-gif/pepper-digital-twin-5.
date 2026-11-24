@@ -263,6 +263,13 @@ def simulate_crop(params, weather=None):
         "Final_Fruit_Dry_Biomass_t_ha": float(daily["Fruit_Dry_Biomass_t_ha"].iloc[-1]),
         "Final_Cumulative_GDD_C_day": float(daily["Cumulative_GDD_C_day"].iloc[-1]),
         "Final_Growth_Stage": str(daily["Growth_Stage"].iloc[-1]),
+        "Rootzone_ECe_ds_m": (
+            float(params["rootzone_ece_ds_m"])
+            if params.get("rootzone_ece_ds_m") is not None else None
+        ),
+        "Salinity_Response_Factor": float(
+            daily["Salinity_Response_Factor"].iloc[-1]
+        ),
         "Illustrative_Fruit_Yield_t_ha": estimated_yield,
         "Illustrative_Water_Productivity_kg_m3": water_productivity,
         "Weather_Provenance": "Literature-based scenario with assumed daily variation",
