@@ -153,12 +153,64 @@ else:
     weather = None
     weather_source = "Literature-based assumed weather"
 
+# Optional measured-state initialization for the digital twin.
+# This does not silently overwrite the user's configured initial condition.
+initialize_store()
+stored_rows = get_observations(limit=5000)
+moisture_rows = [
+    row for row in stored_rows
+    if row.get("soil_moisture_pct") is not None
+]
+simulation_initial_theta = initial_theta
+
+if moisture_rows:
+    st.subheader("Initialize the digital twin from an observation")
+    latest_by_plot = {}
+    for observation in moisture_rows:
+        plot_key = observation.get("plot_id") or "Plot-1"
+        if plot_key not in latest_by_plot:
+            latest_by_plot[plot_key] = observation
+    selected_plot = st.selectbox(
+        "Observation plot",
+        options=sorted(latest_by_plot.keys()),
+        key="initial_state_plot",
+    )
+    selected_observation = latest_by_plot[selected_plot]
+    measured_vwc = float(selected_observation["soil_moisture_pct"])
+    use_measured_state = st.checkbox(
+        "Use latest stored soil-moisture reading as the simulation initial condition",
+        value=False,
+        key="use_measured_initial_vwc",
+    )
+    st.caption(
+        f"Latest available record: {selected_observation.get('timestamp')} | "
+        f"Source: {selected_observation.get('source')} | "
+        f"VWC: {measured_vwc:.2f}%"
+    )
+    if use_measured_state:
+        if wp * 100 <= measured_vwc <= fc * 100:
+            simulation_initial_theta = measured_vwc / 100.0
+            st.success(
+                "The digital twin will start from this measured VWC value."
+            )
+        else:
+            st.warning(
+                "The selected reading is outside the configured wilting-point "
+                "to field-capacity interval. It will not be used; review soil "
+                "parameters or sensor calibration."
+            )
+else:
+    st.info(
+        "No stored moisture readings are available yet. The model will use "
+        "the initial moisture value configured in the sidebar."
+    )
+
 params = {
     "days": crop_days,
     "fc": fc,
     "wp": wp,
     "root_depth_m": root_depth,
-    "initial_theta": initial_theta,
+    "initial_theta": simulation_initial_theta,
     "irrigation_pct": irrigation_pct,
     "fertilizer_pct": fertilizer_pct,
     "irrigation_efficiency": irrigation_eff,
