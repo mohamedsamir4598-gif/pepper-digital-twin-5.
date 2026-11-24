@@ -2,7 +2,7 @@ name: Python checks
 
 on:
   push:
-    branches: ["main", "fix/app-path-import"]
+    branches: ["main"]
   pull_request:
 
 jobs:
