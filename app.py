@@ -694,6 +694,11 @@ with tabs[2]:
 
 with tabs[3]:
     st.subheader("Irrigation and fertilizer scenarios")
+    st.info(
+        "The factorial scenario matrix compares fixed ETc irrigation "
+        "fractions. The soil-moisture-trigger strategy is evaluated in "
+        "the main daily simulation above."
+    )
 
     irrigation_options = st.multiselect(
         "Irrigation levels",
