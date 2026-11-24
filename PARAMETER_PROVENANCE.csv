@@ -13,6 +13,15 @@ Root-zone depth,0.35,m,Assumed,Prototype setting; measure effective rooting dept
 Volumetric field capacity,0.32,m3/m3,Assumed,Do not confuse with gravimetric FC values in papers
 Volumetric wilting point,0.16,m3/m3,Assumed,Must be measured for target soil
 Initial LAI,0.15,m2/m2,Assumed,Seedling/transplant establishment starting point
-RUE,2.2,g dry matter/MJ intercepted PAR,Assumed placeholder,Requires local calibration; not claimed as measured in cited papers
+RUE,1.6,g dry matter/MJ intercepted PAR,Literature reference from open-field pepper,Vieira et al. (2009), Scientia Horticulturae 121:404-409, DOI 10.1016/j.scienta.2009.03.007; not greenhouse-calibrated
 Harvest index,0.35,-,Assumed placeholder,Yield conversion remains illustrative until fruit data calibration
 Reference nitrogen rate,300.0,kg N/ha,Published reference regime,"Xiang et al. (2018), local conventional regime in their study; not an Egypt fertilizer recommendation"
+Base temperature,10,degC,Published reference threshold,Assessing different models to predict the growth and development of pepper plants under water deficits (2024); cultivar and stage-specific thresholds need local calibration
+Optimum temperature,25,degC,Prototype cardinal temperature,Assumed single optimum for vegetative response; flowering and fruit-set optima can differ
+Upper temperature,35,degC,Published reference threshold,2024 pepper growth-model study; stage-specific upper limits and stress responses require calibration
+Flowering thermal time,300,degC day,Assumed prototype threshold,Editable illustrative threshold; replace with observed DAT or GDD for selected cultivar
+Fruit-set thermal time,500,degC day,Assumed prototype threshold,Editable illustrative threshold; replace with observed DAT or GDD for selected cultivar
+Harvest thermal time,1000,degC day,Assumed prototype threshold,Editable illustrative threshold; replace with observed first harvest records
+Specific leaf area,25,m2/kg,Assumed prototype value,Requires destructive leaf area and dry-mass sampling
+Fruit dry matter fraction,0.08,fraction,Assumed prototype value,Measure fresh and dry fruit mass for cultivar and harvest stage
+PAR fraction of global solar,0.48,fraction,Assumed conversion,Verify sensor/radiation convention and local greenhouse covering transmission
