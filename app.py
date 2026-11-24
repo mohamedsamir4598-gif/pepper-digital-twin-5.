@@ -177,7 +177,7 @@ with col1:
     run_now = st.button(
         "Run Digital Twin",
         type="primary",
-        use_container_width=True,
+        width="stretch",
     )
 
 with col2:
@@ -317,7 +317,7 @@ with st.expander("Import observations from CSV", expanded=False):
     if observation_file is not None:
         try:
             imported = pd.read_csv(observation_file)
-            st.dataframe(imported.head(10), use_container_width=True)
+            st.dataframe(imported.head(10), width="stretch")
             if st.button("Import these observations", key="import_observations"):
                 count = add_observations(
                     imported.to_dict(orient="records"), source_override="csv"
@@ -338,7 +338,7 @@ if not observations.empty:
     visible_observations = observations[
         observations["source"].isin(source_filter)
     ]
-    st.dataframe(visible_observations, use_container_width=True)
+    st.dataframe(visible_observations, width="stretch")
     st.download_button(
         "Download observation database as CSV",
         visible_observations.to_csv(index=False).encode("utf-8-sig"),
@@ -458,7 +458,7 @@ try:
         f"{event_plan['Valve_Runtime_min'].max():.1f} min"
         if not event_plan.empty else "No event"
     )
-    st.dataframe(irrigation_plan, use_container_width=True)
+    st.dataframe(irrigation_plan, width="stretch")
     st.download_button(
         "Download candidate irrigation schedule",
         irrigation_plan.to_csv(index=False).encode("utf-8-sig"),
@@ -529,7 +529,7 @@ with tabs[0]:
         title="Daily soil moisture",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.subheader("Leaf Area Index")
 
@@ -540,10 +540,10 @@ with tabs[0]:
         title="LAI development",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.subheader("Daily simulation data")
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width="stretch")
 
 with tabs[1]:
     st.subheader("Soil-water balance")
@@ -554,7 +554,7 @@ with tabs[1]:
         y=["ETc_mm", "ETa_mm", "Irrigation_mm"],
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     fig = px.line(
         df,
@@ -562,7 +562,7 @@ with tabs[1]:
         y=["Depletion_mm", "Drainage_mm"],
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.json(summary)
 
@@ -576,7 +576,7 @@ with tabs[2]:
         title="Biomass development",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     fig = px.line(
         df,
@@ -584,7 +584,7 @@ with tabs[2]:
         y=["Ks", "Nutrient_Factor"],
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.metric(
         "Illustrative fruit yield",
@@ -624,7 +624,7 @@ with tabs[3]:
     if "scenarios" in st.session_state:
         sc = st.session_state.scenarios
 
-        st.dataframe(sc, use_container_width=True)
+        st.dataframe(sc, width="stretch")
 
         fig = px.scatter(
             sc,
@@ -634,7 +634,7 @@ with tabs[3]:
             size="Final_LAI",
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 with tabs[4]:
     st.subheader("Pretrained Artificial Intelligence")
@@ -665,7 +665,7 @@ with tabs[4]:
         ).T.reset_index(names="Predicted variable")
 
         st.subheader("AI performance")
-        st.dataframe(metrics_df, use_container_width=True)
+        st.dataframe(metrics_df, width="stretch")
 
         if st.button(
             "Predict crop growth using AI",
@@ -709,7 +709,7 @@ with tabs[4]:
             st.subheader("AI prediction")
             st.dataframe(
                 prediction,
-                use_container_width=True,
+                width="stretch",
             )
 
             st.caption(
@@ -730,7 +730,7 @@ with tabs[4]:
 
                 st.dataframe(
                     training_data.head(30),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
                 st.download_button(
@@ -829,7 +829,7 @@ with tabs[5]:
         literature = pd.read_csv(literature_path)
         st.dataframe(
             literature,
-            use_container_width=True,
+            width="stretch",
         )
     else:
         st.warning("Literature data file is missing.")
@@ -840,7 +840,7 @@ with tabs[5]:
         st.subheader("Parameter sources")
         st.dataframe(
             provenance,
-            use_container_width=True,
+            width="stretch",
         )
 
 with tabs[6]:
