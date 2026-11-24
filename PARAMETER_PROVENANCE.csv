@@ -25,3 +25,6 @@ Harvest thermal time,1000,degC day,Assumed prototype threshold,Editable illustra
 Specific leaf area,25,m2/kg,Assumed prototype value,Requires destructive leaf area and dry-mass sampling
 Fruit dry matter fraction,0.08,fraction,Assumed prototype value,Measure fresh and dry fruit mass for cultivar and harvest stage
 PAR fraction of global solar,0.48,fraction,Assumed conversion,Verify sensor/radiation convention and local greenhouse covering transmission
+Pepper salinity threshold (ECe),1.5,dS/m,Published generic crop tolerance reference,Maas-Hoffman reference for pepper; cultivar and greenhouse-specific threshold may differ
+Pepper salinity yield slope,14.1,% per dS/m,Published generic crop tolerance reference,Maas-Hoffman reference; used here as a simplified growth multiplier and not a direct biomass validation
+Root-zone salinity input basis,ECe,dS/m,Required laboratory measurement,Saturated-paste extract EC; irrigation-water EC, nutrient-solution EC and uncalibrated bulk soil EC are not interchangeable
