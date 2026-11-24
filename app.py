@@ -159,6 +159,23 @@ with st.sidebar:
         min_value=200.0, max_value=3000.0, value=1000.0, step=25.0
     )
 
+    st.divider()
+    st.subheader("Root-zone salinity (laboratory ECe)")
+    use_rootzone_ece = st.checkbox(
+        "Apply salinity response using measured saturation-extract ECe",
+        value=False,
+    )
+    rootzone_ece_ds_m = st.number_input(
+        "Root-zone ECe (dS/m)",
+        min_value=0.0, max_value=30.0, value=1.5, step=0.1,
+        disabled=not use_rootzone_ece,
+    )
+    st.caption(
+        "Use only laboratory ECe from a saturated-paste extract. "
+        "Do not enter irrigation-water EC, nutrient-solution EC, or an "
+        "uncalibrated in-situ bulk soil EC sensor reading here."
+    )
+
 if wp >= fc:
     st.error("Wilting point must be lower than field capacity.")
     st.stop()
@@ -276,6 +293,9 @@ params = {
     "flowering_gdd": flowering_gdd,
     "fruit_set_gdd": fruit_set_gdd,
     "harvest_gdd": harvest_gdd,
+    "rootzone_ece_ds_m": rootzone_ece_ds_m if use_rootzone_ece else None,
+    "salinity_threshold_ece_ds_m": 1.5,
+    "salinity_slope_pct_per_ds_m": 14.1,
     "area_m2": area_m2,
     "plant_density": plant_density,
 }
