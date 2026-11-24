@@ -4,7 +4,8 @@ Research prototype for pepper greenhouse water management, crop simulation, data
 
 ## Current modules
 
-- **Mechanistic simulation** (models/simulation.py): simplified root-zone water balance, ETc/ETa, stress coefficient, LAI and biomass proxies.
+- **Root-zone water simulation** (models/simulation.py): daily storage, irrigation, ETa, drainage, depletion, water-stress coefficient and numerical water-balance closure.
+- **Pepper growth submodel** (models/crop_growth.py): thermal-time phenology, cardinal-temperature response, PAR interception, LAI, leaf/stem/fruit dry-matter partitioning and illustrative fresh-fruit yield. RUE uses an open-field pepper literature reference as a starting point; thermal thresholds and greenhouse parameters remain editable assumptions.
 - **Synthetic AI surrogate**: Random Forest trained on simulator-generated scenarios. Its reported scores describe agreement with the simulator, not field accuracy.
 - **Data acquisition** (models/data_store.py): manual observations and CSV imports stored in SQLite with source tags (manual, csv, iot).
 - **IoT ingestion API** (sensor_api.py): FastAPI endpoints for future ESP8266/ESP32/gateway integration.
@@ -63,7 +64,7 @@ Set PEPPER_DB_PATH to override the path. For the Streamlit app and API to see th
 ## Data provenance and scientific limits
 
 - Simulation outputs are not measurements. The app keeps synthetic simulation output separate from manual, CSV and IoT observation records.
-- The current crop and water models are simplified research prototypes. Parameters such as Kc, root-zone depth, depletion fraction, crop response and yield conversion require crop- and greenhouse-specific calibration.
+- The current water and crop models are simplified research prototypes. Parameters such as Kc, root-zone depth, depletion fraction, thermal-time thresholds, specific leaf area, canopy extinction coefficient, radiation-use efficiency, dry-matter partitioning and fruit dry-matter fraction require cultivar- and greenhouse-specific calibration. The cited pepper RUE reference is from open-field conditions and is not a greenhouse validation.
 - The candidate irrigation schedule is a rule-based post-processing demonstration using the displayed daily moisture trajectory. It is not yet a closed-loop predictive controller and does not actuate valves or pumps.
 - Emitter count, emitter flow and efficiency in the interface are editable illustrative assumptions. Replace them with measured system specifications and field-calibrated values.
 - The fertilizer calculator computes product mass only from a specified target elemental nutrient concentration, solution volume and labelled elemental nutrient fraction. It does not determine crop demand, convert oxide labels automatically, or verify solubility, compatibility, alkalinity or EC limits.
