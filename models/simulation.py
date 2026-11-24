@@ -275,6 +275,9 @@ def compare_scenarios(
 
             p["irrigation_pct"] = irrigation
             p["fertilizer_pct"] = fertilizer
+            # This factorial matrix explicitly compares fixed ETc fractions.
+            # Trigger-based schedules are evaluated in the main simulation.
+            p["irrigation_strategy"] = "fixed_etc"
 
             result = simulate_crop(p, weather)
             s = result["summary"]
