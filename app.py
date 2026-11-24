@@ -663,34 +663,64 @@ with tabs[1]:
     st.json(summary)
 
 with tabs[2]:
-    st.subheader("Crop growth")
+    st.subheader("Pepper phenology and crop growth")
+    g1, g2, g3 = st.columns(3)
+    g1.metric("Current simulated stage", str(summary["Final_Growth_Stage"]))
+    g2.metric("Accumulated thermal time", f"{summary['Final_Cumulative_GDD_C_day']:.0f} °C·day")
+    g3.metric("Final LAI", f"{summary['Final_LAI']:.2f}")
 
     fig = px.line(
         df,
         x="Day",
-        y="Biomass_t_ha",
-        title="Biomass development",
+        y=["Leaf_Biomass_t_ha", "Stem_Biomass_t_ha", "Fruit_Dry_Biomass_t_ha"],
+        title="Dry-matter partitioning among plant organs",
     )
-
     st.plotly_chart(fig, width="stretch")
 
     fig = px.line(
         df,
         x="Day",
-        y=["Ks", "Nutrient_Factor"],
+        y="LAI",
+        title="Leaf area index development",
     )
+    st.plotly_chart(fig, width="stretch")
 
+    fig = px.line(
+        df,
+        x="Day",
+        y=["Cumulative_GDD_C_day"],
+        title="Accumulated growing degree days",
+    )
+    st.plotly_chart(fig, width="stretch")
+
+    fig = px.line(
+        df,
+        x="Day",
+        y=["Fraction_Intercepted_PAR", "Water_Stress_Factor", "Temperature_Response"],
+        title="Radiation interception and growth constraints",
+    )
     st.plotly_chart(fig, width="stretch")
 
     st.metric(
-        "Illustrative fruit yield",
+        "Illustrative fresh fruit yield",
         f"{summary['Illustrative_Fruit_Yield_t_ha']:.2f} t/ha",
     )
-
     st.warning(
-        "Fruit yield is currently an illustrative estimate, "
-        "not a validated prediction."
+        "Thermal thresholds, specific leaf area, RUE, dry-matter "
+        "partitioning and fruit dry-matter fraction are prototype "
+        "parameters. Yield is an illustrative model output, not a "
+        "validated greenhouse prediction."
     )
+    with st.expander("Daily crop growth state"):
+        st.dataframe(
+            df[[
+                "Day", "Growth_Stage", "Cumulative_GDD_C_day",
+                "PAR_MJ_m2", "Intercepted_PAR_MJ_m2",
+                "Leaf_Biomass_t_ha", "Stem_Biomass_t_ha",
+                "Fruit_Dry_Biomass_t_ha", "LAI",
+            ]],
+            width="stretch",
+        )
 
 with tabs[3]:
     st.subheader("Irrigation and fertilizer scenarios")
