@@ -37,6 +37,9 @@ def simulate_pepper_growth(
     harvest_gdd=1000.0,
     fruit_dry_matter_fraction=0.08,
     harvest_recovery_fraction=0.80,
+    rootzone_ece_ds_m=None,
+    salinity_threshold_ece_ds_m=1.5,
+    salinity_slope_pct_per_ds_m=14.1,
 ):
     """Return daily phenology, LAI and dry-matter partitioning.
 
@@ -56,8 +59,20 @@ def simulate_pepper_growth(
         raise ValueError("Fruit dry matter fraction must be in (0, 1].")
     if not 0 < harvest_recovery_fraction <= 1:
         raise ValueError("Harvest recovery fraction must be in (0, 1].")
+    if salinity_threshold_ece_ds_m < 0 or salinity_slope_pct_per_ds_m < 0:
+        raise ValueError("Salinity threshold and slope cannot be negative.")
+    if rootzone_ece_ds_m is not None and rootzone_ece_ds_m < 0:
+        raise ValueError("Root-zone ECe cannot be negative.")
     if not 0 < flowering_gdd < fruit_set_gdd < harvest_gdd:
         raise ValueError("Require 0 < flowering GDD < fruit-set GDD < harvest GDD.")
+
+    salinity_factor = 1.0
+    if rootzone_ece_ds_m is not None:
+        salinity_factor = max(
+            0.0,
+            1.0 - (salinity_slope_pct_per_ds_m / 100.0)
+            * max(0.0, float(rootzone_ece_ds_m) - salinity_threshold_ece_ds_m),
+        )
 
     n = len(weather)
     water = np.broadcast_to(np.asarray(water_stress, dtype=float), (n,))
@@ -101,7 +116,7 @@ def simulate_pepper_growth(
         par = solar * 0.48
         fipar = 1.0 - np.exp(-extinction_coefficient * lai)
         intercepted_par = par * fipar
-        growth_stress = thermal_effect * water[i] * nutrients[i]
+        growth_stress = thermal_effect * water[i] * nutrients[i] * salinity_factor
         delta_dm_g_m2 = rue_g_mj * intercepted_par * growth_stress
         delta_total_t_ha = max(0.0, delta_dm_g_m2 * 0.01)
 
@@ -132,6 +147,7 @@ def simulate_pepper_growth(
             "Intercepted_PAR_MJ_m2": intercepted_par,
             "Water_Stress_Factor": water[i],
             "Nutrient_Response_Factor": nutrients[i],
+            "Salinity_Response_Factor": salinity_factor,
             "Daily_Dry_Matter_Increment_t_ha": delta_total_t_ha,
             "Leaf_Biomass_t_ha": leaf_dm,
             "Stem_Biomass_t_ha": stem_dm,
