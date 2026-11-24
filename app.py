@@ -21,6 +21,13 @@ from models.training import (
     LITERATURE_MODEL_PATH,
 )
 
+from models.data_store import (
+    initialize_store,
+    add_observation,
+    add_observations,
+    get_observations,
+)
+
 st.set_page_config(
     page_title="Pepper Greenhouse Digital Twin",
     page_icon="🌱",
@@ -184,6 +191,175 @@ if weather is None:
     st.warning(
         "Weather and some crop parameters are assumed or "
         "literature-based. Simulation outputs are not field measurements."
+    )
+
+# ---------------------------------------------------------------------
+# Unified data acquisition: manual entry, CSV import, and IoT records
+# ---------------------------------------------------------------------
+initialize_store()
+st.header("Greenhouse data acquisition")
+st.caption(
+    "Manual and imported observations are stored separately from "
+    "the synthetic digital-twin simulation outputs."
+)
+
+with st.expander("Add a manual greenhouse observation", expanded=False):
+    with st.form("manual_observation_form", clear_on_submit=True):
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            manual_plot = st.text_input("Plot / treatment ID", value="Plot-1")
+            manual_time = st.text_input(
+                "Timestamp (ISO format; optional)", value=""
+            )
+            manual_vwc = st.number_input(
+                "Soil moisture (% VWC)", min_value=0.0,
+                max_value=100.0, value=25.0, step=0.5
+            )
+            manual_soil_temp = st.number_input(
+                "Soil temperature (°C)", value=24.0, step=0.5
+            )
+            manual_soil_ec = st.number_input(
+                "Soil EC (dS/m)", min_value=0.0, value=1.0, step=0.1
+            )
+            manual_soil_ph = st.number_input(
+                "Soil pH", min_value=0.0, max_value=14.0,
+                value=6.5, step=0.1
+            )
+        with m2:
+            manual_air_temp = st.number_input(
+                "Air temperature (°C)", value=25.0, step=0.5
+            )
+            manual_rh = st.number_input(
+                "Relative humidity (%)", min_value=0.0,
+                max_value=100.0, value=60.0, step=1.0
+            )
+            manual_water_ec = st.number_input(
+                "Irrigation water EC (dS/m)", min_value=0.0,
+                value=0.8, step=0.1
+            )
+            manual_water_ph = st.number_input(
+                "Irrigation water pH", min_value=0.0,
+                max_value=14.0, value=7.0, step=0.1
+            )
+            manual_irrigation = st.number_input(
+                "Applied irrigation (L)", min_value=0.0,
+                value=0.0, step=0.1
+            )
+            manual_drainage = st.number_input(
+                "Drainage volume (L)", min_value=0.0,
+                value=0.0, step=0.1
+            )
+        with m3:
+            manual_pot_weight = st.number_input(
+                "Pot weight (kg)", min_value=0.0, value=0.0, step=0.1
+            )
+            manual_drain_weight = st.number_input(
+                "Drainage container weight (kg)", min_value=0.0,
+                value=0.0, step=0.1
+            )
+            manual_n = st.number_input(
+                "N concentration (mg/L)", min_value=0.0, value=0.0, step=1.0
+            )
+            manual_p = st.number_input(
+                "P concentration (mg/L)", min_value=0.0, value=0.0, step=1.0
+            )
+            manual_k = st.number_input(
+                "K concentration (mg/L)", min_value=0.0, value=0.0, step=1.0
+            )
+            manual_notes = st.text_input("Notes")
+        save_manual = st.form_submit_button(
+            "Save manual observation", type="primary"
+        )
+        if save_manual:
+            record = {
+                "timestamp": manual_time or None,
+                "plot_id": manual_plot,
+                "source": "manual",
+                "soil_moisture_pct": manual_vwc,
+                "soil_temperature_c": manual_soil_temp,
+                "soil_ec_ds_m": manual_soil_ec,
+                "soil_ph": manual_soil_ph,
+                "air_temperature_c": manual_air_temp,
+                "relative_humidity_pct": manual_rh,
+                "water_ec_ds_m": manual_water_ec,
+                "water_ph": manual_water_ph,
+                "irrigation_l": manual_irrigation,
+                "drainage_l": manual_drainage,
+                "pot_weight_kg": manual_pot_weight,
+                "drainage_weight_kg": manual_drain_weight,
+                "nitrogen_mg_l": manual_n,
+                "phosphorus_mg_l": manual_p,
+                "potassium_mg_l": manual_k,
+                "notes": manual_notes,
+            }
+            try:
+                add_observation(record, source_override="manual")
+                st.success("Observation saved to the local database.")
+            except Exception as exc:
+                st.error(f"Could not save observation: {exc}")
+
+with st.expander("Import observations from CSV", expanded=False):
+    st.write(
+        "CSV columns supported: timestamp, plot_id, device_id, "
+        "soil_moisture_pct, soil_temperature_c, soil_ec_ds_m, soil_ph, "
+        "air_temperature_c, relative_humidity_pct, water_ec_ds_m, water_ph, "
+        "irrigation_l, drainage_l, pot_weight_kg, drainage_weight_kg, "
+        "nitrogen_mg_l, phosphorus_mg_l, potassium_mg_l, notes."
+    )
+    observation_file = st.file_uploader(
+        "Upload observation CSV", type=["csv"], key="observation_csv_upload"
+    )
+    if observation_file is not None:
+        try:
+            imported = pd.read_csv(observation_file)
+            st.dataframe(imported.head(10), use_container_width=True)
+            if st.button("Import these observations", key="import_observations"):
+                count = add_observations(
+                    imported.to_dict(orient="records"), source_override="csv"
+                )
+                st.success(f"Imported {count} observations. Source tagged as CSV.")
+        except Exception as exc:
+            st.error(f"CSV import failed: {exc}")
+
+observations = pd.DataFrame(get_observations(limit=5000))
+if not observations.empty:
+    st.subheader("Stored measured / manually entered observations")
+    source_filter = st.multiselect(
+        "Filter by data source",
+        options=["manual", "csv", "iot"],
+        default=["manual", "csv", "iot"],
+        key="observation_source_filter",
+    )
+    visible_observations = observations[
+        observations["source"].isin(source_filter)
+    ]
+    st.dataframe(visible_observations, use_container_width=True)
+    st.download_button(
+        "Download observation database as CSV",
+        visible_observations.to_csv(index=False).encode("utf-8-sig"),
+        file_name="pepper_greenhouse_observations.csv",
+        mime="text/csv",
+    )
+else:
+    st.info(
+        "No observations have been entered yet. The simulation can run "
+        "without sensors; add manual data or import a CSV whenever available."
+    )
+
+with st.expander("Connect an IoT gateway (future hardware integration)"):
+    st.markdown(
+        "The API stores incoming sensor records in the same local database "
+        "when it runs on the same computer/environment as this Streamlit app."
+    )
+    st.code(
+        "uvicorn sensor_api:app --host 0.0.0.0 --port 8000\n"
+        "POST http://localhost:8000/api/v1/observations",
+        language="bash",
+    )
+    st.caption(
+        "For remote deployment, configure PEPPER_DB_PATH to a shared "
+        "persistent database location or replace SQLite with a server database. "
+        "Do not expose the API publicly without authentication and network security."
     )
 
 st.header("Greenhouse status")
