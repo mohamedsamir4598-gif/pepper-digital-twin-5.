@@ -756,7 +756,10 @@ with tabs[2]:
     fig = px.line(
         df,
         x="Day",
-        y=["Fraction_Intercepted_PAR", "Water_Stress_Factor", "Temperature_Response"],
+        y=[
+            "Fraction_Intercepted_PAR", "Water_Stress_Factor",
+            "Temperature_Response", "Salinity_Response_Factor",
+        ],
         title="Radiation interception and growth constraints",
     )
     st.plotly_chart(fig, width="stretch")
