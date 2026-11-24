@@ -226,6 +226,9 @@ def simulate_crop(params, weather=None):
         harvest_gdd=float(params.get("harvest_gdd", 1000.0)),
         fruit_dry_matter_fraction=float(params.get("fruit_dry_matter_fraction", 0.08)),
         harvest_recovery_fraction=float(params.get("harvest_recovery_fraction", 0.80)),
+        rootzone_ece_ds_m=params.get("rootzone_ece_ds_m"),
+        salinity_threshold_ece_ds_m=float(params.get("salinity_threshold_ece_ds_m", 1.5)),
+        salinity_slope_pct_per_ds_m=float(params.get("salinity_slope_pct_per_ds_m", 14.1)),
     )
     replaced_columns = [col for col in crop_growth.columns if col != "Day" and col in daily.columns]
     daily = daily.drop(columns=replaced_columns)
