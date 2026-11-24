@@ -132,6 +132,33 @@ with st.sidebar:
         0.0, 5.0, 0.05, 0.01
     )
 
+    st.divider()
+    st.subheader("Pepper growth model parameters")
+    rue_g_mj = st.number_input(
+        "Radiation use efficiency (g DM/MJ intercepted PAR)",
+        min_value=0.1, max_value=5.0, value=1.6, step=0.1
+    )
+    specific_leaf_area = st.number_input(
+        "Specific leaf area (m²/kg)",
+        min_value=1.0, max_value=60.0, value=25.0, step=1.0
+    )
+    extinction_coefficient = st.number_input(
+        "Canopy extinction coefficient (k)",
+        min_value=0.1, max_value=2.0, value=0.70, step=0.05
+    )
+    flowering_gdd = st.number_input(
+        "Flowering threshold (°C·day)",
+        min_value=50.0, max_value=1500.0, value=300.0, step=25.0
+    )
+    fruit_set_gdd = st.number_input(
+        "Fruit-set threshold (°C·day)",
+        min_value=100.0, max_value=2000.0, value=500.0, step=25.0
+    )
+    harvest_gdd = st.number_input(
+        "Harvest-stage threshold (°C·day)",
+        min_value=200.0, max_value=3000.0, value=1000.0, step=25.0
+    )
+
 if wp >= fc:
     st.error("Wilting point must be lower than field capacity.")
     st.stop()
@@ -236,6 +263,12 @@ params = {
     "irrigation_efficiency": irrigation_eff,
     "initial_lai": initial_lai,
     "initial_biomass_t_ha": initial_biomass,
+    "rue_g_mj": rue_g_mj,
+    "specific_leaf_area_m2_kg": specific_leaf_area,
+    "extinction_coefficient": extinction_coefficient,
+    "flowering_gdd": flowering_gdd,
+    "fruit_set_gdd": fruit_set_gdd,
+    "harvest_gdd": harvest_gdd,
     "area_m2": area_m2,
     "plant_density": plant_density,
 }
