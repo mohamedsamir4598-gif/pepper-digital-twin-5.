@@ -163,6 +163,13 @@ if wp >= fc:
     st.error("Wilting point must be lower than field capacity.")
     st.stop()
 
+if not flowering_gdd < fruit_set_gdd < harvest_gdd:
+    st.error(
+        "Growth-stage thermal thresholds must increase: "
+        "flowering < fruit set < harvest."
+    )
+    st.stop()
+
 st.header("Weather data")
 
 weather_file = st.file_uploader(
